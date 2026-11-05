@@ -21,7 +21,7 @@ import pandas as pd
 from .normalize import (
     is_missing, jersey_text, normalize_person_name, player_id_from_link, slugify, split_name, to_number,
 )
-from .transform import GameRecord, LinesResult, PlayerLine
+from .transform import GameRecord, LinesResult, PlayerLine, drop_unreliable_player_ids
 
 OFFENCE = {
     "passing_completions": "passing_completions",
@@ -181,5 +181,6 @@ def build_football_lines(frames: dict[str, pd.DataFrame], games: list[GameRecord
         ))
         counts["kept"] += 1
 
+    counts["unreliable_player_ids"] = drop_unreliable_player_ids(lines)
     lines.sort(key=lambda l: (l.game_date, l.source_game_id))
     return LinesResult(lines, [], counts, hints)

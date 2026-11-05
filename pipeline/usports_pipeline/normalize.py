@@ -10,9 +10,21 @@ import pandas as pd
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _NON_ALPHA = re.compile(r"[^a-z]+")
-_PLAYER_ID = re.compile(r"/players\?id=([A-Za-z0-9]+)")
+# Old form: /players?id=abc123 ; newer feeds: /players/owenharrisi76j
+_PLAYER_ID = re.compile(r"/players(?:\?id=|/)([A-Za-z0-9]+)")
 _TEAM_ID = re.compile(r"/teams\?id=([A-Za-z0-9]+)")
 _LINK_SEGMENT = re.compile(r"/sports/[a-z]+/([0-9]{4}-[0-9]{2}[a-z]?)/")
+
+
+def fix_mojibake(s: str) -> str:
+    """Repair UTF-8 text that was decoded as Latin-1 ("MontrÃ©al" -> "Montréal").
+    Some usportspy feeds carry it; left as-is it breaks team and name matching."""
+    if "Ã" in s or "Â" in s:
+        try:
+            return s.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return s
+    return s
 
 
 def strip_accents(s: str) -> str:
@@ -25,18 +37,18 @@ def slugify(name: str) -> str:
     Hyphens and spaces are dropped (not kept as '-') because the source feeds
     are inconsistent about them ("Ontario Tech" vs "ontariotech").
     """
-    return _NON_ALNUM.sub("", strip_accents(name).lower())
+    return _NON_ALNUM.sub("", strip_accents(fix_mojibake(name)).lower())
 
 
 def normalize_person_name(name: str) -> str:
     """Name key used for identity matching: accent-free, lower-case, letters only."""
-    s = strip_accents(name).lower().replace("'", "")
+    s = strip_accents(fix_mojibake(name)).lower().replace("'", "")
     return " ".join(_NON_ALPHA.sub(" ", s).split())
 
 
 def split_name(full: str) -> tuple[str, str]:
     """'CJ Evans' -> ('CJ', 'Evans'); 'Evans, CJ' -> ('CJ', 'Evans')."""
-    full = " ".join(str(full).split())
+    full = " ".join(fix_mojibake(str(full)).split())
     if "," in full:
         last, _, first = full.partition(",")
         return first.strip(), last.strip()

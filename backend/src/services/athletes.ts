@@ -53,6 +53,15 @@ export async function searchAthletes(db: Queryable, p: AthleteSearch) {
   const tsq = p.q ? toPrefixQuery(p.q) : null;
   if (p.q && !tsq) throw new HttpError(400, 'VALIDATION_ERROR', 'q must contain letters or digits');
 
+  // A position filter means "eligible for that roster slot": hockey F covers
+  // C/LW/RW, basketball G covers G/PG/SG; a '*' slot matches everyone.
+  let positionTokens: string[] | null = null;
+  if (p.position) {
+    const slot = p.position.toUpperCase();
+    const eligible = sport.roster_config_json?.position_eligibility?.[slot] ?? [];
+    positionTokens = eligible.includes('*') ? null : [...new Set([slot, ...eligible])];
+  }
+
   const order = p.sort === 'name'
     ? 'a.last_name, a.first_name, a.id'
     : 'st.fantasy_points_avg DESC NULLS LAST, a.last_name, a.first_name, a.id';
@@ -71,13 +80,13 @@ export async function searchAthletes(db: Queryable, p: AthleteSearch) {
         AND ($4::bigint IS NULL OR u.id = $4)
         AND ($5::text   IS NULL OR u.slug = $5)
         AND ($6::text   IS NULL OR to_tsvector('simple', a.first_name || ' ' || a.last_name) @@ to_tsquery('simple', $6))
-        AND ($7::text   IS NULL OR $7 = ANY (a.positions))
+        AND ($7::text[] IS NULL OR a.positions && $7::text[])
         AND ($10::text  IS NULL OR u.conference::text = $10)
         AND ($11::bigint IS NULL OR NOT EXISTS (
               SELECT 1 FROM roster_spots rs WHERE rs.league_id = $11 AND rs.athlete_id = a.id))
       ORDER BY ${order}
       LIMIT $8 OFFSET $9`,
-    [sport.code, season, sport.id, uniId, uniSlug, tsq, p.position?.toUpperCase() ?? null,
+    [sport.code, season, sport.id, uniId, uniSlug, tsq, positionTokens,
      p.pageSize, (p.page - 1) * p.pageSize, p.conference?.toUpperCase() ?? null, p.availableInLeague ?? null],
   );
 
@@ -121,7 +130,7 @@ interface GameLogRow {
   opponent_score: number | null;
   is_exhibition: boolean;
   is_playoff: boolean;
-  raw_stats_json: Record<string, number>;
+  stat_payload_json: Record<string, number>;
   fantasy_points_calculated: string | null;
 }
 
@@ -149,7 +158,7 @@ export async function getAthlete(db: Queryable, athleteId: string, games = 10) {
             g.home_university_id = gs.university_id AS is_home,
             CASE WHEN g.home_university_id = gs.university_id THEN g.home_score ELSE g.away_score END AS team_score,
             CASE WHEN g.home_university_id = gs.university_id THEN g.away_score ELSE g.home_score END AS opponent_score,
-            g.is_exhibition, g.is_playoff, gs.raw_stats_json, gs.fantasy_points_calculated
+            g.is_exhibition, g.is_playoff, gs.stat_payload_json, gs.fantasy_points_calculated
        FROM game_stats gs
        JOIN games g ON g.id = gs.game_id
        JOIN universities opp ON opp.id = gs.opponent_id
@@ -170,7 +179,7 @@ export async function getAthlete(db: Queryable, athleteId: string, games = 10) {
         : `${g.team_score > g.opponent_score ? 'W' : g.team_score < g.opponent_score ? 'L' : 'T'} ${g.team_score}-${g.opponent_score}`,
       exhibition: g.is_exhibition,
       playoff: g.is_playoff,
-      stats: g.raw_stats_json,
+      stats: g.stat_payload_json,
       fantasy_points: g.is_exhibition || g.fantasy_points_calculated === null ? null : Number(g.fantasy_points_calculated),
     })),
   };

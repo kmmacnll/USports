@@ -24,8 +24,8 @@ For safety, the test database name must contain "test".
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| GET | `/sports` | – | Supported sports with their default `ruleset_id`, roster positions and scoring rules (`?include_inactive=true` adds the rest) |
-| GET | `/athletes?sport=usports_mbk` | – | Search athletes with season stats. Filters: `university` (slug or id), `q` (name prefix), `position`, `season`. Also `sort=fantasy_points\|name`, `page`, `page_size` (≤100) |
+| GET | `/sports` | – | Active sports with `season_type`, default `ruleset_id`, roster slots, position eligibility, scoring and stat columns. `?sport_id=usports_mhk` returns one sport (inactive ones included). Also `?season_type=FALL\|WINTER\|SPRING` and `?include_inactive=true` |
+| GET | `/athletes?sport_id=usports_mhk` | – | Search athletes with season stats. Filters: `university` (slug or id), `q` (name prefix), `position` (matches the slot's eligibility, e.g. hockey `F` = C/LW/RW), `conference`, `season`. Also `sort=fantasy_points\|name`, `page`, `page_size` (≤100). `sport` is accepted as an alias for `sport_id` |
 | POST | `/auth/pin` | – | `{ pin, name }` → a 30-day bearer token for the account `pin:<name>`. Enabled by `ACCESS_PIN`; wrong PINs are rate limited (5 per address and 50 overall per 15 min) |
 | GET | `/me` | ✓ | Profile, terms status, declared athlete sports, teams |
 | PUT | `/me/terms` | ✓ | Accept the current T&C and answer the U Sports athlete question |
@@ -53,7 +53,7 @@ POST /api/v1/leagues
         "scoring_rules": { "passing": { "yards": 0.04, ... }, ... }, "season": "2026-27",
         "invite_code": "3f9a1c2e", ... }
 
-GET /api/v1/athletes?sport=usports_mbk&university=carleton
+GET /api/v1/athletes?sport_id=usports_mbk&university=carleton
 → 200 { "season": "2026-27",
         "data": [{ "athlete_id": "usports_ath_15", "first_name": "...", "last_name": "...",
                    "university": "Carleton", "conference": null, "sport": "usports_mbk", "position": "G",

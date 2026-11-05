@@ -10,10 +10,13 @@ python -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
 export DATABASE_URL=postgres://usports:usports@localhost:5432/usports_fantasy
 
-python ingest_usports.py --sport usports_mbk               # schedule + box scores, current season
+python ingest_usports.py --sport all                       # every active sport in the database
+python ingest_usports.py --sport usports_mhk,usports_mvb   # specific sports
 python ingest_usports.py --sport usports_mbk --rosters     # ...plus usports.ca roster pages
 python ingest_usports.py --sport all --dry-run             # run everything, then roll back
+python ingest_usports.py --sport all --strict              # exit 1 if any sport fails
 pytest -q                                                  # unit tests (offline)
+PIPELINE_TEST_DATABASE_URL=postgres://…/postgres pytest -q  # + integration tests on a real Postgres
 ```
 
 Re-running is safe and cheap. A second run with no source changes writes 0 rows.
@@ -22,14 +25,59 @@ Re-running is safe and cheap. A second run with no source changes writes 0 rows.
 
 | Data | Source | Gives us |
 |---|---|---|
-| Schedule | `usportspy.basketball_get_schedule()`, `fb_get_schedule()` | games, scores, exhibition/conference/playoff flags, team names |
-| Basketball box scores | `usportspy.basketball_get_player_box_score()` | per-game player lines, jersey, starter flag, usports.ca player and team links |
+| Schedules | `usportspy.*_get_schedule()` | games, scores, exhibition/conference/playoff flags, team names |
+| Basketball box scores | `basketball_get_player_box_score()` | per-game player lines, jersey, starter flag, usports.ca player and team links |
+| Hockey box scores | `ice_hockey_get_player_box_score()` | skater and goalie lines; positions (C/LW/RW/D/G) for starters |
+| Volleyball box scores | `volleyball_get_player_box_score()` | per-match lines (kills, digs, aces, blocks...); no positions |
+| Soccer box scores | `soccer_get_player_box_score()` | goals, assists, shots, saves, minutes, cards; positions |
 | Football box scores | `usportspy.fb_get_offence()`, `fb_get_kicking()`, `fb_get_defence()`, `fb_get_scoring_summaries()` | merged into one line per player per game; FG distances and singles come from the scoring summaries |
 | Rosters | en.usports.ca team pages (`usports_pipeline/rosters.py`, BeautifulSoup, optional Playwright) | position, height, class year, hometown, and athletes who haven't played yet |
 
 `usportspy` has no roster endpoint for team sports, so roster details come
 from usports.ca. The team page URLs are taken from the box-score feed, not
 guessed.
+
+### Sports covered
+
+| Sport | Status |
+|---|---|
+| Basketball M/W, football, hockey M/W, volleyball M/W, soccer M/W | ✅ ingested (active in `sports`) |
+| Field hockey | catalogued, inactive: no 2026-27 player box score in usportspy |
+| Rugby | catalogued, inactive: schedules only, no player stats |
+| Track & field, cross-country, swimming, wrestling | catalogued, inactive: rankings/meet results, not head-to-head games. They need a meet-based fantasy model |
+| Curling | catalogued, inactive: not in usportspy |
+| Lacrosse | not a U Sports sport |
+
+### How box scores are normalised
+
+`transform.build_player_lines()` is one generic normaliser. Each sport
+declares a `BoxScoreSpec` in `usports_pipeline/sports.py`:
+- **columns:** name, team label, home/away side, jersey, position and starter flag;
+- **stats:** a map from source columns to canonical stat keys, plus optional derived stats (soccer cards).
+
+The output is a flat `{key: number}` stat payload, stored in
+`game_stats.stat_payload_json`. Teams are resolved by, in order: the
+home/away column; an index label (hockey writes `1`/`2` for away/home,
+verified against final scores); or the team name matched to the schedule.
+
+### Resilience
+- **Per-sport isolation.** Each sport runs in its own committed
+  transaction. A failure (schema drift, missing file, network) rolls back
+  only that sport, logs `WARNING … FAILED … continuing`, and appears under
+  `failures` in the JSON summary. The exit code is 0 unless every sport
+  failed, or `--strict` is set and any sport failed.
+- **Schema drift.** Before parsing, each spec checks its required columns and
+  raises `SchemaDriftError` naming what's missing. A missing *optional* stat
+  column is only counted (`missing_stat_columns`).
+- **Download retries.** Transient GitHub errors (e.g. 504) are retried twice
+  with backoff. 404s aren't retried.
+- **Data-quality guards**, each found in the live 2026-27 feeds:
+  - mojibake (`MontrÃ©al`) is repaired;
+  - player links that a feed repeats across several players (soccer: 357 of
+    615 ids) are discarded for the mismatched rows;
+  - an athlete listed twice in one game (hockey goalies, in both the skater
+    and goalie tables) is merged into one line;
+  - dates exported as day counts (`20684`) are converted.
 
 ### Derived, not hard-coded
 - **U Sports membership:** a team is a member if it plays at least one conference
@@ -54,6 +102,7 @@ guessed.
 | Identity resolution | ✅ checked on a 2025-26 dry run: 963 lines linked to returning players by name, one same-name pair split |
 | `usports_wbk` 2026-27 | ✅ ran end to end: 568 games, 48 member universities, 1,057 athletes, 3,667 stat lines; second run was a no-op |
 | `usports_fb` 2026-27 | ✅ ran end to end: 102 games, 27 member universities, 1,414 athletes, 5,474 stat lines, every row matched to a team; second run was a no-op |
+| Hockey, volleyball, soccer 2026-27 | ✅ ran end to end; counts are in the PR that added them. The new rulesets are **provisional** |
 | **Roster scraper** | ⚠️ **not yet run against live en.usports.ca.** The host was blocked by the network policy of the environment where this was written. The parser is unit tested on a synthetic page only. Run `--rosters --dry-run -v` once and check the log before relying on it |
 | Conferences (OUA/CW/RSEQ/AUS) | not populated yet. `universities.conference` stays NULL until a standings or roster source fills it |
 
@@ -84,21 +133,18 @@ find football rosters yet. Football athletes have no positions until it can.
 
 ## Adding a sport
 
-1. Add a `SportAdapter` in `usports_pipeline/sports.py`: what to fetch
-   (`fetch_frames`) and how to turn those frames into player lines
-   (`build_lines`). Single-file box scores can reuse `build_player_lines`
-   with a `BoxScoreSpec`. Multi-file sports get their own module
-   (`football.py`).
-2. Add a default competition whose `scoring_rules_json` keys match those
-   stat keys.
-3. Set `sports.is_active = TRUE`.
-
-Hockey's feed uses `player`, `position` and `starter_status` columns, so it
-needs its own `BoxScoreSpec`. It is the only adapter here whose feed includes
-positions.
+1. **Single-file box score:** declare a `BoxScoreSpec` (columns, stat-key
+   map, required columns) and register it with `_single_file(...)` in
+   `usports_pipeline/sports.py`. No parsing code is needed.
+   **Multi-file box score:** write a builder like `football.py`.
+2. Add a default competition in `db/seeds/0003_default_competitions.sql`,
+   with scoring keys matching the canonical stat keys. Use `"*"` in
+   `position_eligibility` if the feed has no positions.
+3. Set the sport's `is_active = TRUE` in `db/seeds/0001_sports.sql`.
+   `--sport all` picks it up automatically.
 
 ## Scheduling
 
 On Render, both jobs are defined in `render.yaml` (see `docs/deploy-render.md`):
-stats every 2 hours, rosters weekly. Both pass `--no-season-check`, because
+stats daily at 2 AM Eastern, rosters weekly. Both pass `--no-season-check`, because
 the GitHub API is rate-limited per IP and Render's outbound IPs are shared.

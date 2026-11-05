@@ -27,7 +27,7 @@ SELECT s.id, 'x1', '2026-27', '2026-27', '2026-08-01', a.id, b.id, 'FINAL', TRUE
  WHERE s.code = 'usports_mbk' AND a.slug = 'alpha' AND b.slug = 'beta';
 
 -- Gary: 20/5 and 10/5 in league games, 50 points in an exhibition (must be ignored).
-INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, raw_stats_json)
+INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, stat_payload_json)
 SELECT a.id, g.id, g.game_date, g.home_university_id, g.away_university_id, v.stats::jsonb
   FROM (VALUES ('Guard', 't1', '{"points":20,"rebounds":5}'),
                ('Guard', 't2', '{"points":10,"rebounds":5}'),
@@ -40,10 +40,16 @@ UPDATE game_stats gs SET university_id = g.away_university_id, opponent_id = g.h
 
 -- Same scoring step the pipeline runs (usports_pipeline/sync.py: rescore).
 INSERT INTO game_stat_fantasy_points (game_stat_id, competition_id, points)
-SELECT gs.id, c.id, fantasy_score(gs.raw_stats_json, c.scoring_rules_json)
+SELECT gs.id, c.id, fantasy_score(gs.stat_payload_json, c.scoring_rules_json)
   FROM game_stats gs JOIN games g ON g.id = gs.game_id
   JOIN competitions c ON c.sport_id = g.sport_id AND c.season = g.season
  WHERE c.count_exhibitions OR NOT g.is_exhibition;
-UPDATE game_stats gs SET fantasy_points_calculated = fantasy_score(gs.raw_stats_json, c.scoring_rules_json)
+UPDATE game_stats gs SET fantasy_points_calculated = fantasy_score(gs.stat_payload_json, c.scoring_rules_json)
   FROM games g, competitions c
  WHERE g.id = gs.game_id AND c.sport_id = g.sport_id AND c.season = g.season AND c.is_default;
+
+-- Volleyball: the feed publishes no positions; its ruleset uses a '*' slot.
+INSERT INTO athletes (first_name, last_name, university_id, sport_id, position, positions)
+SELECT v.f, v.l, u.id, s.id, NULL, '{}'::text[]
+  FROM (VALUES ('Vera', 'Spiker'), ('Val', 'Setter')) v(f, l), universities u, sports s
+ WHERE u.slug = 'alpha' AND s.code = 'usports_mvb';

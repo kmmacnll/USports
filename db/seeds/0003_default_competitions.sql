@@ -7,7 +7,7 @@
 -- position_eligibility maps each starter slot to the normalised position
 -- tokens (athletes.positions) that may fill it. BENCH accepts anyone.
 -- Scoring keys must match the stat keys the pipeline writes into
--- game_stats.raw_stats_json (grouped rules score "group_stat").
+-- game_stats.stat_payload_json (grouped rules score "group_stat").
 --
 -- The U Sports feeds label every sport's season "YYYY-YY", football included.
 
@@ -51,3 +51,62 @@ ON CONFLICT (sport_id, season, name) DO UPDATE
       roster_config_json = EXCLUDED.roster_config_json,
       scoring_rules_json = EXCLUDED.scoring_rules_json,
       is_default         = EXCLUDED.is_default;
+
+-- -----------------------------------------------------------------------------
+-- PROVISIONAL rulesets for hockey, volleyball and soccer. These are common
+-- fantasy conventions, not product-approved rules; the name says so in the UI.
+-- Replace the weights here (and drop "(provisional)") once they're decided.
+-- Stat keys are the ones pipeline/usports_pipeline/sports.py writes.
+-- -----------------------------------------------------------------------------
+
+-- Ice hockey: F 3 (C/LW/RW), D 2, G 1 + 4 bench = 10.
+--   Skaters: goal 3, assist 2, +/- 1, shot 0.5, PIM -0.25.
+--   Goalies: save 0.2, goal against -1.
+INSERT INTO competitions (code, name, sport_id, season, roster_config_json, scoring_rules_json, is_default)
+SELECT s.code || '_standard', 'Standard (provisional)', s.id, usports_current_season(),
+       '{"slot_order":           ["F","D","G","BENCH"],
+         "roster_limits":        {"F":3,"D":2,"G":1,"BENCH":4},
+         "position_eligibility": {"F":["F","C","LW","RW"], "D":["D"], "G":["G"]}}'::jsonb,
+       '{"goals":3.0, "assists":2.0, "plus_minus":1.0, "shots":0.5, "penalty_minutes":-0.25,
+         "saves":0.2, "goals_allowed":-1.0}'::jsonb,
+       TRUE
+  FROM sports s
+ WHERE s.code IN ('usports_mhk', 'usports_whk')
+ON CONFLICT (sport_id, season, name) DO UPDATE
+  SET code = EXCLUDED.code, roster_config_json = EXCLUDED.roster_config_json,
+      scoring_rules_json = EXCLUDED.scoring_rules_json, is_default = EXCLUDED.is_default;
+
+-- Volleyball: the feed publishes no positions, so starters use a wildcard
+-- slot ("*" = any athlete of the sport). PLAYER 6 + 4 bench = 10.
+--   kill 1, ace 2, solo block 2, block assist 1, dig 0.5, set assist 0.25,
+--   attack / service / reception error -0.5.
+INSERT INTO competitions (code, name, sport_id, season, roster_config_json, scoring_rules_json, is_default)
+SELECT s.code || '_standard', 'Standard (provisional)', s.id, usports_current_season(),
+       '{"slot_order":           ["PLAYER","BENCH"],
+         "roster_limits":        {"PLAYER":6,"BENCH":4},
+         "position_eligibility": {"PLAYER":["*"]}}'::jsonb,
+       '{"kills":1.0, "service_aces":2.0, "block_solos":2.0, "block_assists":1.0, "digs":0.5,
+         "assists":0.25, "attack_errors":-0.5, "service_errors":-0.5, "reception_errors":-0.5}'::jsonb,
+       TRUE
+  FROM sports s
+ WHERE s.code IN ('usports_mvb', 'usports_wvb')
+ON CONFLICT (sport_id, season, name) DO UPDATE
+  SET code = EXCLUDED.code, roster_config_json = EXCLUDED.roster_config_json,
+      scoring_rules_json = EXCLUDED.scoring_rules_json, is_default = EXCLUDED.is_default;
+
+-- Soccer: GK 1, D 3, M 3, F 2 + 4 bench = 13.
+--   goal 6, assist 3, shot on goal 1, save 1, goal against -1,
+--   yellow card -1, red card -3.
+INSERT INTO competitions (code, name, sport_id, season, roster_config_json, scoring_rules_json, is_default)
+SELECT s.code || '_standard', 'Standard (provisional)', s.id, usports_current_season(),
+       '{"slot_order":           ["GK","D","M","F","BENCH"],
+         "roster_limits":        {"GK":1,"D":3,"M":3,"F":2,"BENCH":4},
+         "position_eligibility": {"GK":["GK"], "D":["D"], "M":["M"], "F":["F"]}}'::jsonb,
+       '{"goals":6.0, "assists":3.0, "shots_on_goal":1.0, "saves":1.0, "goals_against":-1.0,
+         "yellow_cards":-1.0, "red_cards":-3.0}'::jsonb,
+       TRUE
+  FROM sports s
+ WHERE s.code IN ('usports_msoc', 'usports_wsoc')
+ON CONFLICT (sport_id, season, name) DO UPDATE
+  SET code = EXCLUDED.code, roster_config_json = EXCLUDED.roster_config_json,
+      scoring_rules_json = EXCLUDED.scoring_rules_json, is_default = EXCLUDED.is_default;

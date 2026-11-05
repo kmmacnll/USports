@@ -24,15 +24,19 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   const page = Math.max(1, Number(p.page) || 1);
   const sort = p.sort === 'name' ? 'name' : 'fantasy_points';
   const [{ data: universities }, results] = await Promise.all([
-    api<{ data: University[] }>('/universities', { auth: false, query: { sport: sport.sport_id }, revalidate: 300 }),
+    api<{ data: University[] }>('/universities', { auth: false, query: { sport_id: sport.sport_id }, revalidate: 300 }),
     api<Paginated<Athlete>>('/athletes', {
       auth: false,
-      query: { sport: sport.sport_id, q: p.q, university: p.university, conference: p.conference, position: p.position,
+      query: { sport_id: sport.sport_id, q: p.q, university: p.university, conference: p.conference, position: p.position,
                sort, page, page_size: PAGE_SIZE },
     }),
   ]);
   const conferences = [...new Set(universities.map((u) => u.conference).filter((c): c is string => !!c))].sort();
-  const positions = sport.roster_limits ? Object.keys(sport.roster_limits).filter((k) => k !== 'BENCH' && k !== 'IR') : [];
+  // Starter slots as position filters; wildcard ('*') slots don't narrow anything, so they're hidden.
+  const positions = sport.roster_limits
+    ? Object.keys(sport.roster_limits).filter((k) => k !== 'BENCH' && k !== 'IR'
+        && !(sport.position_eligibility?.[k] ?? []).includes('*'))
+    : [];
   const { total } = results.pagination;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const keep = { sport: sport.sport_id, q: p.q, university: p.university, conference: p.conference, position: p.position, sort };
@@ -76,7 +80,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
             {conferences.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        <div>
+        <div className={positions.length ? '' : 'hidden'}>
           <label className="label" htmlFor="position">Position</label>
           <select id="position" name="position" defaultValue={p.position ?? ''} className="input">
             <option value="">Any</option>

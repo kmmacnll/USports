@@ -16,7 +16,7 @@ const isStarter = (slot: string) => slot !== 'BENCH' && slot !== 'IR';
 function eligible(slot: string, positions: string[], rules: Record<string, string[]>) {
   if (!isStarter(slot)) return true;
   const allowed = [...(rules[slot] ?? []), slot];
-  return positions.some((p) => allowed.includes(p));
+  return allowed.includes('*') || positions.some((p) => allowed.includes(p));
 }
 
 function applySwap(slots: RosterSlot[], from: string, to: string): RosterSlot[] {
