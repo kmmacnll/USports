@@ -7,14 +7,17 @@
 # rejects a value (most likely a plan name), change it there.
 
 databases:
+  # Only fields that can safely be (re)applied to an EXISTING database are set
+  # here. databaseName, user and postgresMajorVersion can never change after
+  # creation, so declaring values that differ from the live database (yours
+  # is named varsityhq_db) makes every Blueprint sync fail. A failed sync
+  # leaves the services' DATABASE_URL and start command stale. ipAllowList is
+  # left to the dashboard (Networking), so a sync can't silently block
+  # external connections.
   - name: varsityhq-db
-    databaseName: varsityhq
-    user: varsityhq
-    plan: basic-256mb          # paid: the free plan expires
+    plan: basic-256mb          # keep in step with the plan shown on varsityhq-db
     region: virginia           # ALL resources must share the database's region: its internal
                                # dpg-… hostname only resolves within that region (ENOTFOUND otherwise)
-    postgresMajorVersion: "16"
-    ipAllowList: []            # private network only; add your IP to connect from a laptop
 
 services:
   # ------------------------------------------------------------ REST API
