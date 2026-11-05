@@ -4,7 +4,7 @@ import { type Db, type Queryable, withTransaction } from '../db.js';
 import { HttpError, notFound } from '../errors.js';
 import { encodeId } from '../ids.js';
 import { isEligible, isStarterSlot, orderSlots, orderedLimits } from '../sport-display.js';
-import type { RosterConfig } from './sports.js';
+import type { RosterConfig, ScoringRules } from './sports.js';
 import { getSport } from './sports.js';
 
 // ----------------------------------------------------------------- leagues
@@ -21,9 +21,11 @@ interface LeagueRow {
   invite_code: string;
   created_at: Date;
   competition_id: string;
+  ruleset_id: string;
+  ruleset_name: string;
   season: string;
   roster_config_json: RosterConfig;
-  scoring_rules_json: Record<string, number>;
+  scoring_rules_json: ScoringRules;
   sport_code: string;
   team_count: number;
   viewer_team_id: string | null;
@@ -32,7 +34,7 @@ interface LeagueRow {
 const LEAGUE_SQL = `
   SELECT l.id, l.name, l.commissioner_id, l.max_teams, l.roster_size, l.roster_limits_json,
          l.status, l.is_private, l.invite_code, l.created_at,
-         c.id AS competition_id, c.season, c.roster_config_json, c.scoring_rules_json,
+         c.id AS competition_id, c.code AS ruleset_id, c.name AS ruleset_name, c.season, c.roster_config_json, c.scoring_rules_json,
          s.code AS sport_code,
          (SELECT count(*)::int FROM fantasy_teams t WHERE t.league_id = l.id) AS team_count,
          (SELECT t.id FROM fantasy_teams t WHERE t.league_id = l.id AND t.user_id = $2) AS viewer_team_id
@@ -65,7 +67,8 @@ function formatLeague(l: LeagueRow, userId: string) {
     team_count: l.team_count,
     sport: l.sport_code,
     season: l.season,
-    competition_id: l.competition_id,
+    ruleset_id: l.ruleset_id,
+    ruleset_name: l.ruleset_name,
     roster_size: l.roster_size,
     roster_limits: orderedLimits(l.roster_limits_json, cfg.slot_order),
     scoring_rules: l.scoring_rules_json,
@@ -83,7 +86,7 @@ export interface CreateLeague {
   max_teams: number;
   roster_limits?: Record<string, number>;
   roster_size?: number;
-  competition_id?: string;
+  ruleset_id?: string;
   is_private: boolean;
   team_name?: string;
 }
@@ -93,11 +96,13 @@ export async function createLeague(db: Db, userId: string, input: CreateLeague) 
   if (!sport.is_active) throw new HttpError(422, 'SPORT_INACTIVE', `${sport.name} is not open for fantasy leagues yet`);
 
   let competitionId = sport.competition_id;
-  if (input.competition_id) {
+  if (input.ruleset_id) {
+    // Latest season of that ruleset for this sport.
     const { rows } = await db.query<{ id: string }>(
-      'SELECT id FROM competitions WHERE id = $1 AND sport_id = $2 AND is_public', [input.competition_id, sport.id]);
+      `SELECT id FROM competitions WHERE code = $1 AND sport_id = $2 AND is_public
+        ORDER BY season DESC LIMIT 1`, [input.ruleset_id, sport.id]);
     competitionId = rows[0]?.id ?? null;
-    if (!competitionId) throw new HttpError(422, 'UNKNOWN_COMPETITION', 'That ruleset does not exist for this sport');
+    if (!competitionId) throw new HttpError(422, 'UNKNOWN_RULESET', `Ruleset '${input.ruleset_id}' does not exist for ${sport.name}`);
   }
   if (!competitionId) {
     throw new HttpError(422, 'NO_RULESET', `${sport.name} has no default scoring ruleset yet`);

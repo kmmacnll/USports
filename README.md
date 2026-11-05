@@ -6,7 +6,7 @@ U Sports fantasy league app built on real data from current Canadian university 
 | Path        | What                                                         | Status |
 |-------------|--------------------------------------------------------------|--------|
 | `db/`       | PostgreSQL schema, migrations, seeds, smoke test             | ✅ Phase 1 |
-| `pipeline/` | Python 3.11+ ingestion (`usportspy` + usports.ca → Postgres) | ✅ Phase 2 (basketball) |
+| `pipeline/` | Python 3.11+ ingestion (`usportspy` + usports.ca → Postgres) | ✅ Phase 2 (basketball, football) |
 | `backend/`  | Node.js / Express 5 / TypeScript REST API (`/api/v1`)        | ✅ Phase 3 |
 | `docs/`     | Product rules, e.g. [athlete eligibility T&C](docs/terms/athlete-eligibility.md) | |
 
@@ -21,5 +21,7 @@ cd pipeline && python -m venv .venv && .venv/bin/pip install -r requirements-dev
 .venv/bin/python ingest_usports.py --sport usports_mbk --rosters
 cd ../backend && npm ci && cp .env.example .env && npm run dev   # http://localhost:3000/api/v1/sports
 ```
+
+**Deploying:** [`docs/deploy-render.md`](docs/deploy-render.md) (Render Blueprint in `render.yaml`).
 
 See [`db/README.md`](db/README.md) for the data model, [`pipeline/README.md`](pipeline/README.md) for ingestion, and [`backend/README.md`](backend/README.md) for the API.

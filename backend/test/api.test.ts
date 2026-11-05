@@ -47,10 +47,25 @@ describe('GET /api/v1/sports', () => {
     expect(mbk).toMatchObject({
       sport_name: "Men's Basketball",
       season: '2026-27',
-      roster_positions: ['PG', 'SG', 'SF', 'PF', 'C', 'BENCH'],
+      ruleset_id: 'usports_mbk_standard',
+      roster_positions: ['G', 'G', 'F', 'F', 'C', 'BENCH', 'BENCH', 'BENCH', 'BENCH', 'BENCH', 'BENCH'],
+      roster_limits: { G: 2, F: 2, C: 1, BENCH: 6 },
       scoring_rules: { points: 1, rebounds: 1.2, assists: 1.5, steals: 3, blocks: 3, turnovers: -1 },
     });
-    expect(Object.keys(mbk.roster_limits)).toEqual(['PG', 'SG', 'SF', 'PF', 'C', 'BENCH']);
+    expect(Object.keys(mbk.roster_limits)).toEqual(['G', 'F', 'C', 'BENCH']);
+
+    const fb = res.body.data.find((s: { sport_id: string }) => s.sport_id === 'usports_fb');
+    expect(fb).toMatchObject({
+      ruleset_id: 'usports_football_half_ppr',
+      ruleset_name: 'Half-PPR Scoring',
+      roster_limits: { QB: 2, RB: 3, WR: 4, K: 1, DEF: 1, BENCH: 4 },
+      scoring_rules: {
+        passing: { yards: 0.04, touchdown: 4, interception: -2, two_point: 2 },
+        kicking: { fg_0_39: 3, fg_40_49: 4, fg_50_plus: 5, pat: 1, single_rouge: 1, fg_missed: -1 },
+        misc: { fumble_lost: -2 },
+      },
+    });
+    expect(Object.keys(fb.roster_limits)).toEqual(['QB', 'RB', 'WR', 'K', 'DEF', 'BENCH']);
     expect(res.body.data.map((s: { sport_id: string }) => s.sport_id)).not.toContain('usports_mhk');
   });
 
@@ -156,10 +171,10 @@ describe('leagues', () => {
       .send({ league_name: 'Hoops League', sport: 'usports_mbk', max_teams: 2, team_name: 'Commish Five' })
       .expect(201);
     expect(res.body).toMatchObject({
-      league_name: 'Hoops League', sport: 'usports_mbk', season: '2026-27', max_teams: 2, roster_size: 6,
-      team_count: 1, status: 'PRE_DRAFT', is_private: true,
+      league_name: 'Hoops League', sport: 'usports_mbk', season: '2026-27', max_teams: 2, roster_size: 11,
+      ruleset_id: 'usports_mbk_standard', team_count: 1, status: 'PRE_DRAFT', is_private: true,
     });
-    expect(Object.keys(res.body.roster_limits)).toEqual(['PG', 'SG', 'SF', 'PF', 'C', 'BENCH']);
+    expect(Object.keys(res.body.roster_limits)).toEqual(['G', 'F', 'C', 'BENCH']);
     expect(res.body.league_id).toMatch(/^lg_\d+$/);
     expect(res.body.commissioner_id).toMatch(/^usr_\d+$/);
     expect(res.headers.location).toBe(`/api/v1/leagues/${res.body.league_id}`);
@@ -173,7 +188,15 @@ describe('leagues', () => {
       roster_limits: { QB: 2, RB: 3, WR: 4, K: 1, DEF: 1, BENCH: 4 },
     }).expect(201);
     expect(res.body.roster_limits).toEqual({ QB: 2, RB: 3, WR: 4, K: 1, DEF: 1, BENCH: 4 });
-    expect(res.body.roster_size).toBe(15);
+    expect(res.body).toMatchObject({ roster_size: 15, ruleset_id: 'usports_football_half_ppr', season: '2026-27' });
+  });
+
+  it('selects a ruleset by ruleset_id', async () => {
+    await request(app).post('/api/v1/leagues').set(as('commish'))
+      .send({ league_name: 'By Id', sport: 'usports_fb', ruleset_id: 'usports_football_half_ppr' }).expect(201);
+    const res = await request(app).post('/api/v1/leagues').set(as('commish'))
+      .send({ league_name: 'Wrong Sport', sport: 'usports_fb', ruleset_id: 'usports_mbk_standard' }).expect(422);
+    expect(res.body.error.code).toBe('UNKNOWN_RULESET');
   });
 
   it('validates roster limits', async () => {
@@ -226,45 +249,49 @@ describe('leagues', () => {
   describe('rosters', () => {
     const roster = async (subject = 'commish') =>
       (await request(app).get(`/api/v1/leagues/${hoops}/roster`).set(as(subject)).expect(200)).body;
-    const slotOf = (body: { slots: { slot: string; athlete: { last_name: string } | null }[] }, last: string) =>
-      body.slots.find((s) => s.athlete?.last_name === last)?.slot;
+    type RosterBody = { slots: { slot: string; slot_index: number; athlete: { last_name: string } | null }[] };
+    const spotOf = (body: RosterBody, last: string) => {
+      const s = body.slots.find((x) => x.athlete?.last_name === last);
+      return s ? `${s.slot}#${s.slot_index}` : undefined;
+    };
 
-    it('adds athletes to the first eligible open slot', async () => {
+    it('adds athletes to the first eligible open slot (G, G, F, F, C, then bench)', async () => {
       await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
         .send({ athlete_id: await athleteId('Guard') }).expect(201);
       await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
         .send({ athlete_id: await athleteId('Centre') }).expect(201);
       const res = await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
         .send({ athlete_id: await athleteId('Noposition') }).expect(201);
-      expect(slotOf(res.body, 'Guard')).toBe('PG');
-      expect(slotOf(res.body, 'Centre')).toBe('C');
-      expect(slotOf(res.body, 'Noposition')).toBe('BENCH');
+      expect(spotOf(res.body, 'Guard')).toBe('G#1');
+      expect(spotOf(res.body, 'Centre')).toBe('C#1');
+      expect(spotOf(res.body, 'Noposition')).toBe('BENCH#1');
     });
 
-    it('rejects an athlete already on another team, and a full roster', async () => {
+    it('rejects an athlete already on another team, and an ineligible explicit slot', async () => {
       const taken = await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('rival'))
         .send({ athlete_id: await athleteId('Guard') }).expect(409);
       expect(taken.body.error.code).toBe('ATHLETE_ALREADY_ROSTERED');
 
-      await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
-        .send({ athlete_id: await athleteId('Guardson') }).expect(201);   // -> SG
-      const full = await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
-        .send({ athlete_id: await athleteId('Forward') }).expect(201);    // -> SF
-      expect(slotOf(full.body, 'Forward')).toBe('SF');
-      // Remaining open slot is PF; a guard is not eligible and the bench is taken.
-      await request(app).delete(`/api/v1/leagues/${hoops}/roster/${await athleteId('Guardson')}`)
-        .set(as('commish')).expect(200);
-      await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
-        .send({ athlete_id: await athleteId('Guardson'), slot: 'PF' }).expect(422);
+      const ineligible = await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
+        .send({ athlete_id: await athleteId('Guardson'), slot: 'F' }).expect(422);
+      expect(ineligible.body.error.code).toBe('INELIGIBLE_POSITION');
+
+      const g2 = await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
+        .send({ athlete_id: await athleteId('Guardson') }).expect(201);
+      expect(spotOf(g2.body, 'Guardson')).toBe('G#2');
+      const f1 = await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
+        .send({ athlete_id: await athleteId('Forward') }).expect(201);
+      expect(spotOf(f1.body, 'Forward')).toBe('F#1');
     });
 
-    it('shows the full roster in slot order with season fantasy points for this competition', async () => {
+    it('shows all 11 slots in order with season fantasy points for this ruleset', async () => {
       const body = await roster();
-      expect(body.slots.map((s: { slot: string }) => s.slot)).toEqual(['PG', 'SG', 'SF', 'PF', 'C', 'BENCH']);
-      expect(body.filled).toBe(4);
-      const guard = body.slots.find((s: { slot: string }) => s.slot === 'PG');
-      expect(guard).toMatchObject({ slot_type: 'STARTER', athlete: { last_name: 'Guard', season_fantasy_points: 42, games_played: 2 } });
-      expect(body.slots.find((s: { slot: string }) => s.slot === 'SG').athlete).toBeNull();
+      expect(body.slots.map((s: { slot: string }) => s.slot)).toEqual(
+        ['G', 'G', 'F', 'F', 'C', 'BENCH', 'BENCH', 'BENCH', 'BENCH', 'BENCH', 'BENCH']);
+      expect(body).toMatchObject({ roster_size: 11, filled: 5 });
+      const guard = body.slots.find((s: { athlete: { last_name: string } | null }) => s.athlete?.last_name === 'Guard');
+      expect(guard).toMatchObject({ slot_type: 'STARTER', athlete: { season_fantasy_points: 42, games_played: 2 } });
+      expect(body.slots.filter((s: { athlete: unknown }) => s.athlete === null)).toHaveLength(6);
     });
 
     it('lets league members view another team by team_id, but not outsiders', async () => {
@@ -276,39 +303,40 @@ describe('leagues', () => {
     });
 
     it('swaps starter and bench atomically and rolls back ineligible swaps', async () => {
-      // Guard (PG) <-> Noposition (BENCH): Noposition can't start at PG -> rejected, nothing moves.
+      // Guard (G#1) <-> Noposition (BENCH#1): Noposition can't start at G -> rejected, nothing moves.
       const bad = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('commish'))
         .send({ athlete_id: await athleteId('Guard'), target_slot: 'BENCH' }).expect(422);
       expect(bad.body.error.code).toBe('INELIGIBLE_POSITION');
-      expect(slotOf(await roster(), 'Guard')).toBe('PG');
+      expect(spotOf(await roster(), 'Guard')).toBe('G#1');
+      expect(spotOf(await roster(), 'Noposition')).toBe('BENCH#1');
 
-      // Move into an empty slot.
-      const moved = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('commish'))
-        .send({ athlete_id: await athleteId('Guard'), target_slot: 'SG' }).expect(200);
-      expect(slotOf(moved.body, 'Guard')).toBe('SG');
+      // Bench a starter into an empty bench slot.
+      const benched = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('commish'))
+        .send({ athlete_id: await athleteId('Guard'), target_slot: 'BENCH', target_slot_index: 2 }).expect(200);
+      expect(spotOf(benched.body, 'Guard')).toBe('BENCH#2');
 
-      // Occupied target: a bench guard moves into SG and the SG starter drops to the bench.
-      await request(app).delete(`/api/v1/leagues/${hoops}/roster/${await athleteId('Noposition')}`).set(as('commish')).expect(200);
-      await request(app).post(`/api/v1/leagues/${hoops}/roster`).set(as('commish'))
-        .send({ athlete_id: await athleteId('Guardson'), slot: 'BENCH' }).expect(201);
+      // Occupied target: Guard comes back into G#2 and Guardson drops to Guard's bench slot.
       const swapped = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('commish'))
-        .send({ athlete_id: await athleteId('Guardson'), target_slot: 'SG' }).expect(200);
-      expect(slotOf(swapped.body, 'Guardson')).toBe('SG');
-      expect(slotOf(swapped.body, 'Guard')).toBe('BENCH');
+        .send({ athlete_id: await athleteId('Guard'), target_slot: 'G', target_slot_index: 2 }).expect(200);
+      expect(spotOf(swapped.body, 'Guard')).toBe('G#2');
+      expect(spotOf(swapped.body, 'Guardson')).toBe('BENCH#2');
     });
 
     it('validates swap requests', async () => {
       const notMine = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('rival'))
-        .send({ athlete_id: await athleteId('Guard'), target_slot: 'PG' }).expect(404);
+        .send({ athlete_id: await athleteId('Guard'), target_slot: 'G' }).expect(404);
       expect(notMine.body.error.code).toBe('NOT_ON_ROSTER');
       const badSlot = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('commish'))
         .send({ athlete_id: await athleteId('Guard'), target_slot: 'QB' }).expect(422);
       expect(badSlot.body.error.code).toBe('INVALID_SLOT');
+      const pastLimit = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('commish'))
+        .send({ athlete_id: await athleteId('Guard'), target_slot: 'G', target_slot_index: 3 }).expect(422);
+      expect(pastLimit.body.error.code).toBe('INVALID_SLOT');
       const noop = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('commish'))
-        .send({ athlete_id: await athleteId('Guard'), target_slot: 'BENCH' }).expect(400);
+        .send({ athlete_id: await athleteId('Guard'), target_slot: 'G', target_slot_index: 2 }).expect(400);
       expect(noop.body.error.code).toBe('NO_CHANGE');
       const outsider = await request(app).post(`/api/v1/leagues/${hoops}/roster/swap`).set(as('third'))
-        .send({ athlete_id: await athleteId('Guard'), target_slot: 'PG' }).expect(404);
+        .send({ athlete_id: await athleteId('Guard'), target_slot: 'G' }).expect(404);
       expect(outsider.body.error.code).toBe('NOT_FOUND');
     });
   });

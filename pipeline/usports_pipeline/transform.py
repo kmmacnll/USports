@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -11,7 +12,7 @@ from .normalize import (
     split_name, team_id_from_link, to_bool, to_number,
 )
 from .seasons import split_segment
-from .sports import SportAdapter
+from .sports import BoxScoreSpec
 
 
 @dataclass
@@ -62,10 +63,34 @@ class TeamSeasonRecord:
     team_url: str
 
 
+@dataclass
+class LinesResult:
+    lines: list[PlayerLine]
+    team_seasons: list[TeamSeasonRecord]
+    counts: dict[str, int]
+    # slug -> display name seen in box scores ("Queen's"), used when the
+    # schedule only has a slug-like spelling ("queens")
+    name_hints: dict[str, str] = field(default_factory=dict)
+
+
 def _display_name_preference(name: str) -> tuple[int, int]:
     """Prefer the published display form ('Ontario Tech') over slug-like
     variants ('ontariotech') when the feed contains both."""
     return (any(c.isupper() for c in name), name.count(" "))
+
+
+_GAME_ID_DATE = re.compile(r"^(\d{8})_")
+
+
+def game_date(raw_date, game_id) -> dt.date | None:
+    """Schedule date, falling back to the date encoded in the usports.ca game
+    id ("20260822_qaam" -> 2026-08-22); some feeds leave the date blank."""
+    if not is_missing(raw_date):
+        parsed = pd.to_datetime(raw_date, errors="coerce")
+        if not pd.isna(parsed):
+            return parsed.date()
+    m = _GAME_ID_DATE.match(str(game_id))
+    return dt.datetime.strptime(m.group(1), "%Y%m%d").date() if m else None
 
 
 def build_schedule(df: pd.DataFrame, season: str, today: dt.date | None = None
@@ -94,9 +119,11 @@ def build_schedule(df: pd.DataFrame, season: str, today: dt.date | None = None
             if slug not in names or _display_name_preference(name) > _display_name_preference(names[slug]):
                 names[slug] = name
 
+        date = game_date(r.date, r.game_id)
+        if date is None:
+            continue
         base, suffix = split_segment(str(r.season))
         hs, as_ = to_number(r.home_score), to_number(r.away_score)
-        date = pd.to_datetime(r.date).date()
         final = hs is not None and as_ is not None
         games.append(GameRecord(
             source_game_id=str(r.game_id),
@@ -119,8 +146,7 @@ def build_schedule(df: pd.DataFrame, season: str, today: dt.date | None = None
     return teams, games
 
 
-def build_player_lines(df: pd.DataFrame, adapter: SportAdapter, games: list[GameRecord]
-                       ) -> tuple[list[PlayerLine], list[TeamSeasonRecord], dict[str, int]]:
+def build_player_lines(df: pd.DataFrame, spec: BoxScoreSpec, games: list[GameRecord]) -> LinesResult:
     """Box-score rows -> PlayerLine per athlete per game.
 
     The box score's own team label is not trusted for identity (it differs
@@ -140,32 +166,32 @@ def build_player_lines(df: pd.DataFrame, adapter: SportAdapter, games: list[Game
         if game is None:
             counts["no_game"] += 1
             continue
-        side = str(r.get(adapter.team_side_column, "")).lower()
+        side = str(r.get(spec.team_side_column, "")).lower()
         if side not in ("home", "away"):
             counts["no_game"] += 1
             continue
         team_slug = game.home_slug if side == "home" else game.away_slug
         opp_slug = game.away_slug if side == "home" else game.home_slug
 
-        role = str(r.get(adapter.role_column, "")).upper() if adapter.role_column else ""
-        if adapter.team_row_role and role == adapter.team_row_role:
+        role = str(r.get(spec.role_column, "")).upper() if spec.role_column else ""
+        if spec.team_row_role and role == spec.team_row_role:
             counts["team_rows"] += 1
             tid = team_id_from_link(r.get("player_links"))
             if tid:
                 team_seasons[team_slug] = TeamSeasonRecord(team_slug, tid, str(r["player_links"]))
             continue
 
-        name = r.get(adapter.name_column)
+        name = r.get(spec.name_column)
         if is_missing(name) or not str(name).strip():
             continue
-        if adapter.activity_columns and not any(
-            (to_number(r.get(c)) or 0) > 0 for c in adapter.activity_columns
+        if spec.activity_columns and not any(
+            (to_number(r.get(c)) or 0) > 0 for c in spec.activity_columns
         ):
             counts["did_not_play"] += 1
             continue
 
         stats = {}
-        for col, key in adapter.stat_columns.items():
+        for col, key in spec.stat_columns.items():
             v = to_number(r.get(col))
             if v is not None:
                 stats[key] = v
@@ -183,11 +209,11 @@ def build_player_lines(df: pd.DataFrame, adapter: SportAdapter, games: list[Game
             player_id=pid,
             season_segment=seg or game.season_segment,
             jersey_number=jersey_text(r.get("jersey_number")),
-            is_starter=(role == adapter.starter_role) if adapter.starter_role else None,
+            is_starter=(role == spec.starter_role) if spec.starter_role else None,
             game_date=game.game_date,
             stats=stats,
         ))
         counts["kept"] += 1
 
     lines.sort(key=lambda l: (l.game_date, l.source_game_id))
-    return lines, list(team_seasons.values()), counts
+    return LinesResult(lines, list(team_seasons.values()), counts)

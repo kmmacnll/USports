@@ -32,9 +32,13 @@ def upsert_universities(cur: psycopg.Cursor, teams) -> dict[str, int]:
         INSERT INTO universities (name, slug, is_usports_member)
         VALUES (%s, %s, %s)
         ON CONFLICT (slug) DO UPDATE
-           SET name = EXCLUDED.name,
+           -- Names are shared across sports: only upgrade a slug-like spelling
+           -- ("queens") to a display one ("Queen's"), never the reverse.
+           SET name = CASE WHEN universities.name = lower(universities.name)
+                            AND EXCLUDED.name <> lower(EXCLUDED.name)
+                           THEN EXCLUDED.name ELSE universities.name END,
                is_usports_member = universities.is_usports_member OR EXCLUDED.is_usports_member
-         WHERE universities.name IS DISTINCT FROM EXCLUDED.name
+         WHERE (universities.name = lower(universities.name) AND EXCLUDED.name <> lower(EXCLUDED.name))
             OR (EXCLUDED.is_usports_member AND NOT universities.is_usports_member)
         """,
         [(t.name, t.slug, t.is_member) for t in direct],

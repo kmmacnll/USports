@@ -17,7 +17,7 @@ db/
 ```bash
 docker compose up -d db
 export DATABASE_URL=postgres://usports:usports@localhost:5432/usports_fantasy
-./db/migrate.sh up && ./db/migrate.sh seed
+./db/migrate.sh up && ./db/migrate.sh seed      # or, without psql: cd backend && npm run migrate:dev
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/schema_smoke_test.sql
 ```
 
@@ -55,32 +55,46 @@ usports.ca ids, which change every season.
 | athlete | `usports_ath_10482` | `athletes.id` |
 | league | `lg_98765` | `leagues.id` |
 | user | `usr_1` | `users.id` |
+| team | `tm_3` | `fantasy_teams.id` |
+| ruleset | `usports_football_half_ppr` | `competitions.code` |
 
-Sport codes: `usports_mbk`, `usports_wbk` (active); `usports_mhk`,
-`usports_whk`, `usports_fb`, `usports_mvb`, `usports_wvb`, `usports_msoc`,
+Sport codes: `usports_mbk`, `usports_wbk`, `usports_fb` (active);
+`usports_mhk`, `usports_whk`, `usports_mvb`, `usports_wvb`, `usports_msoc`,
 `usports_wsoc` (catalogued, not yet ingested).
 
 ## JSON contracts
 
-**`competitions.scoring_rules_json`**: a flat map of stat key to points. The
-keys match `game_stats.raw_stats_json`. Scoring is computed in the database by
-`fantasy_score(stats, rules)`.
+**`competitions.code`** is the public `ruleset_id` (`usports_mbk_standard`,
+`usports_football_half_ppr`). It is unique per season.
+
+**`competitions.scoring_rules_json`** is either flat or grouped one level deep.
+A grouped rule scores the stat key `<group>_<stat>`. Scoring is computed in
+the database by `fantasy_score(stats, rules)`, and the stat keys match
+`game_stats.raw_stats_json`.
 ```json
 {"points":1.0,"rebounds":1.2,"assists":1.5,"steals":3.0,"blocks":3.0,"turnovers":-1.0}
+{"passing":{"yards":0.04,"touchdown":4.0,"interception":-2.0,"two_point":2.0},
+ "kicking":{"fg_0_39":3.0,"fg_40_49":4.0,"fg_50_plus":5.0,"pat":1.0,"single_rouge":1.0,"fg_missed":-1.0},
+ "misc":{"fumble_lost":-2.0}, ...}          // passing.yards scores raw_stats_json.passing_yards
 ```
+
+| Ruleset | Roster (starters + bench) |
+|---|---|
+| `usports_mbk_standard`, `usports_wbk_standard` | G 2, F 2, C 1 + BENCH 6 = 11 |
+| `usports_football_half_ppr` | QB 2, RB 3, WR 4, K 1, DEF 1 + BENCH 4 = 15 |
+
+Basketball eligibility is generic: G accepts G/PG/SG, F accepts F/SF/PF, C accepts C.
+Football's `DEF` slot has no scoring rules yet, so it scores 0.
 
 **`competitions.roster_config_json`**
 ```json
-{"slot_order":           ["PG","SG","SF","PF","C","BENCH"],
- "roster_limits":        {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
- "position_eligibility": {"PG":["PG","G"],"SG":["SG","G"],"SF":["SF","F"],"PF":["PF","F"],"C":["C"]}}
+{"slot_order":           ["G","F","C","BENCH"],
+ "roster_limits":        {"G":2,"F":2,"C":1,"BENCH":6},
+ "position_eligibility": {"G":["G","PG","SG"],"F":["F","SF","PF"],"C":["C"]}}
 ```
-`roster_positions: ["PG","SG","SF","PF","C","BENCH"]` is stored as one slot
-per entry. `slot_order` keeps that display order, because jsonb objects don't
-preserve key order. A starter slot accepts athletes whose `athletes.positions` overlap
-its eligibility list. U Sports rosters mostly publish a generic G, F or C, so
-G fills PG or SG and F fills SF or PF. `BENCH` (and `IR`) accept any athlete in
-the sport.
+`slot_order` keeps the display order, because jsonb objects don't preserve key
+order. A starter slot accepts athletes whose `athletes.positions` overlap its
+eligibility list. `BENCH` (and `IR`) accept any athlete in the sport.
 
 **`leagues.roster_limits_json` / `roster_size`**: these default to the
 competition's limits and can be overridden per league. `roster_size` must
@@ -114,7 +128,8 @@ the hint straight to an error code.
 
 ## Seasons
 
-`"YYYY-YY"` for winter sports (`2026-27`) and `"YYYY"` for fall sports such as
-football. `games.season_segment` keeps the source's suffix (`2026-27p` for
+Every sport uses `"YYYY-YY"` (`2026-27`); the U Sports feeds label football
+that way too. `usports_current_season()` rolls over on July 1, and the seeds
+create the current season's rulesets on every deploy. `games.season_segment` keeps the source's suffix (`2026-27p` for
 playoffs, `2026-27c` for championships). The `athlete_season_stats` view leaves
 out exhibition games.

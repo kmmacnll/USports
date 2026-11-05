@@ -1,0 +1,97 @@
+# Render Blueprint: Postgres + API + ingestion cron jobs.
+# Guide: docs/deploy-render.md
+#
+# Field names and plan names were written from Render's Blueprint spec as of
+# 2025 and have NOT been validated against Render's current docs. Render
+# validates this file when you create the Blueprint; fix anything it flags
+# there (most likely plan names).
+
+databases:
+  - name: usports-db
+    databaseName: usports_fantasy
+    user: usports
+    plan: basic-256mb          # paid; the free plan expires after a fixed period
+    region: ohio               # closest Render region to Ontario/Quebec
+    postgresMajorVersion: "16"
+    ipAllowList: []            # no access from outside Render; add your IP to run tools locally
+
+services:
+  # ---------------------------------------------------------------- REST API
+  - type: web
+    name: usports-api
+    runtime: node
+    region: ohio
+    plan: starter              # pre-deploy commands need a paid instance
+    branch: main
+    buildCommand: cd backend && npm ci --include=dev && npm run build
+    preDeployCommand: cd backend && npm run migrate
+    startCommand: cd backend && npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - backend/**
+        - db/**
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22.20.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: usports-db
+          property: connectionString
+      - key: LOG_LEVEL
+        value: info
+      # Until the iOS app's sign-in provider is chosen, tokens are HS256-signed
+      # with this generated secret. Switch to JWT_JWKS_URL later (see guide).
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_JWKS_URL
+        sync: false
+      - key: JWT_ISSUER
+        sync: false
+      - key: JWT_AUDIENCE
+        sync: false
+
+  # ---------------------------------------------------- stats ingestion (2h)
+  - type: cron
+    name: usports-ingest-stats
+    runtime: python
+    region: ohio
+    plan: starter
+    branch: main
+    schedule: "15 */2 * * *"   # UTC: every 2 hours at :15
+    buildCommand: pip install -r pipeline/requirements.txt
+    startCommand: cd pipeline && python ingest_usports.py --sport all --no-season-check
+    buildFilter:
+      paths:
+        - pipeline/**
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: usports-db
+          property: connectionString
+
+  # ------------------------------------------------- roster scrape (weekly)
+  - type: cron
+    name: usports-ingest-rosters
+    runtime: python
+    region: ohio
+    plan: starter
+    branch: main
+    schedule: "30 9 * * 1"     # UTC: Mondays 09:30 (05:30 Eastern)
+    buildCommand: pip install -r pipeline/requirements.txt
+    startCommand: cd pipeline && python ingest_usports.py --sport all --rosters --skip-stats --no-season-check
+    buildFilter:
+      paths:
+        - pipeline/**
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: usports-db
+          property: connectionString

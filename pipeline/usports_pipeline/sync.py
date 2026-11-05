@@ -12,7 +12,7 @@ from . import db
 from .db import Jsonb
 from .seasons import current_season, season_start_year
 from .sports import SportAdapter, get_adapter
-from .transform import build_player_lines, build_schedule
+from .transform import build_schedule
 
 log = logging.getLogger(__name__)
 
@@ -29,21 +29,21 @@ def disable_usportspy_season_check() -> None:
 @dataclass
 class Frames:
     schedule: pd.DataFrame
-    player_box: pd.DataFrame
+    players: dict[str, pd.DataFrame]
 
 
 def load_frames(adapter: SportAdapter, season: str, source_dir: Path | None = None) -> Frames:
     """Fetch via usportspy, or read the same CSVs from a local directory
-    (<dir>/<code>/schedule.csv, <dir>/<code>/player_box_<season>.csv) for
-    offline replays and tests."""
+    (<dir>/<code>/schedule.csv and <dir>/<code>/<frame>_<season>.csv for each
+    of adapter.frame_names) for offline replays and tests."""
     if source_dir:
         base = Path(source_dir) / adapter.code
         return Frames(
             schedule=pd.read_csv(base / "schedule.csv"),
-            player_box=pd.read_csv(base / f"player_box_{season}.csv"),
+            players={n: pd.read_csv(base / f"{n}_{season}.csv") for n in adapter.frame_names},
         )
     year = season_start_year(season)
-    return Frames(schedule=adapter.fetch_schedule(), player_box=adapter.fetch_player_box([year]))
+    return Frames(schedule=adapter.fetch_schedule(), players=adapter.fetch_frames([year]))
 
 
 def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
@@ -61,7 +61,12 @@ def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
     frames = frames or load_frames(adapter, season, source_dir)
 
     teams, games = build_schedule(frames.schedule, season)
-    lines, team_seasons, line_counts = build_player_lines(frames.player_box, adapter, games)
+    result = adapter.build_lines(frames.players, games)
+    lines, team_seasons, line_counts = result.lines, result.team_seasons, result.counts
+    for t in teams:
+        hint = result.name_hints.get(t.slug)
+        if hint and t.name == t.name.lower():
+            t.name = hint
     log.info("%s %s: %d games, %d teams (%d members), %d player lines",
              sport_code, season, len(games), len(teams), sum(t.is_member for t in teams), len(lines))
 

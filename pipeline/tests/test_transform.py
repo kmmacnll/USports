@@ -2,7 +2,7 @@ import datetime as dt
 
 import pandas as pd
 
-from usports_pipeline.sports import ADAPTERS
+from usports_pipeline.sports import BASKETBALL_BOX
 from usports_pipeline.transform import build_player_lines, build_schedule
 
 SCHEDULE = pd.DataFrame([
@@ -46,10 +46,18 @@ def test_player_lines_map_team_from_schedule_and_drop_dnp_and_team_rows():
          "https://en.usports.ca/sports/mbkb/2026-27/teams?id=ott", "g1"],
         ["game", "X", "home", "STARTER", 1.0, "Ghost", 10, 2, 0, 0, 0, 0, 0, None, "not-in-schedule"],
     ])
-    lines, team_seasons, counts = build_player_lines(box, ADAPTERS["usports_mbk"], games)
+    res = build_player_lines(box, BASKETBALL_BOX, games)
+    lines, team_seasons, counts = res.lines, res.team_seasons, res.counts
     assert len(lines) == 1
     ln = lines[0]
     assert (ln.team_slug, ln.opponent_slug, ln.player_id, ln.is_starter) == ("carleton", "ottawa", "p1", True)
     assert ln.stats == {"points": 20, "rebounds": 5, "assists": 4, "steals": 1, "blocks": 0, "turnovers": 2, "minutes": 30}
     assert [t.usports_team_id for t in team_seasons] == ["ott"]
     assert counts["did_not_play"] == 1 and counts["no_game"] == 1 and counts["team_rows"] == 1
+
+
+def test_game_date_falls_back_to_game_id():
+    from usports_pipeline.transform import game_date
+    assert game_date(None, "20260822_qaam") == dt.date(2026, 8, 22)
+    assert game_date("2026-08-23", "20260822_qaam") == dt.date(2026, 8, 23)
+    assert game_date(float("nan"), float("nan")) is None

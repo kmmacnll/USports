@@ -5,9 +5,11 @@
 -- Design notes
 --   * Sport-agnostic: nothing in this schema knows what a "rebound" or a
 --     "save" is. Box-score lines live in game_stats.raw_stats_json (JSONB) and
---     are scored by each competition's scoring_rules_json (a flat
---     {"stat_key": multiplier} map) via fantasy_score(). Roster shape is data
---     too: {"PG":1, ..., "BENCH":1}.
+--     are scored by each competition's scoring_rules_json via
+--     fantasy_score(). Rules are {"stat": weight} or grouped
+--     {"group": {"stat": weight}}; a grouped rule scores the stat key
+--     "group_stat" (passing.yards -> passing_yards). Roster shape is data
+--     too: {"G":2, "F":2, "C":1, "BENCH":6}.
 --   * Real-world data (universities, sports, team_seasons, athletes, games,
 --     game_stats) is owned by the Python ingestion pipeline and upserted on
 --     natural keys. U Sports has no stable cross-season athlete id, so athlete
@@ -68,17 +70,58 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
   SELECT coalesce(sum(e.value::text::numeric), 0) FROM jsonb_each(j) e;
 $$;
 
+-- Valid scoring rules: a non-empty object whose values are numbers, or
+-- non-empty objects of numbers (one level of grouping).
+CREATE OR REPLACE FUNCTION jsonb_is_scoring_rules(j JSONB) RETURNS BOOLEAN
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT jsonb_typeof(j) = 'object'
+     AND EXISTS (SELECT 1 FROM jsonb_each(j))
+     AND NOT EXISTS (
+       SELECT 1 FROM jsonb_each(j) e
+        WHERE NOT (jsonb_typeof(e.value) = 'number'
+                   OR (jsonb_typeof(e.value) = 'object'
+                       AND e.value <> '{}'::jsonb
+                       AND jsonb_is_number_map(e.value))));
+$$;
+
+-- Flatten a ruleset into (stat_key, weight) rows:
+--   {"points":1}                     -> ("points", 1)
+--   {"passing":{"yards":0.04}}       -> ("passing_yards", 0.04)
+CREATE OR REPLACE FUNCTION scoring_weights(rules JSONB)
+RETURNS TABLE (stat_key TEXT, weight NUMERIC)
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT r.key, r.value::text::numeric
+    FROM jsonb_each(rules) r
+   WHERE jsonb_typeof(r.value) = 'number'
+  UNION ALL
+  SELECT r.key || '_' || n.key, n.value::text::numeric
+    FROM jsonb_each(rules) r
+   CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(r.value) = 'object' THEN r.value ELSE '{}'::jsonb END) n
+   WHERE jsonb_typeof(n.value) = 'number';
+$$;
+
 -- Fantasy points for one stat line under one ruleset.
 --   fantasy_score('{"points":20,"rebounds":5}', '{"points":1,"rebounds":1.2}') = 26.00
+--   fantasy_score('{"passing_yards":300}', '{"passing":{"yards":0.04}}')     = 12.00
 -- Stats missing from the line, or non-numeric, count as 0.
 CREATE OR REPLACE FUNCTION fantasy_score(stats JSONB, rules JSONB) RETURNS NUMERIC(8,2)
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
   SELECT coalesce(sum(
-           r.value::text::numeric *
-           CASE WHEN jsonb_typeof(stats -> r.key) = 'number'
-                THEN (stats ->> r.key)::numeric ELSE 0 END
+           w.weight *
+           CASE WHEN jsonb_typeof(stats -> w.stat_key) = 'number'
+                THEN (stats ->> w.stat_key)::numeric ELSE 0 END
          ), 0)::numeric(8,2)
-    FROM jsonb_each(rules) r;
+    FROM scoring_weights(rules) w;
+$$;
+
+-- Current U Sports season label, e.g. '2026-27'. Rolls over on July 1 (the
+-- feeds start with summer exhibition tours); matches the pipeline's
+-- seasons.current_season().
+CREATE OR REPLACE FUNCTION usports_current_season(at DATE DEFAULT current_date) RETURNS TEXT
+LANGUAGE sql STABLE AS $$
+  SELECT y::text || '-' || lpad(((y + 1) % 100)::text, 2, '0')
+    FROM (SELECT CASE WHEN extract(month FROM at) >= 7 THEN extract(year FROM at)::int
+                      ELSE extract(year FROM at)::int - 1 END AS y) t;
 $$;
 
 -- =============================================================================
@@ -191,7 +234,7 @@ CREATE TABLE games (
   id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   sport_id            SMALLINT    NOT NULL REFERENCES sports (id) ON DELETE RESTRICT,
   source_game_id      TEXT        NOT NULL,           -- usports.ca game id, "20261024_wgcg"
-  season              TEXT        NOT NULL,           -- "2026-27" (winter) or "2026" (fall)
+  season              TEXT        NOT NULL,           -- "2026-27" (the feeds label fall sports this way too)
   season_segment      TEXT        NOT NULL,           -- raw source season incl. suffix, "2026-27p"
   game_date           DATE        NOT NULL,
   start_time          TIMESTAMPTZ,
@@ -289,17 +332,21 @@ CREATE INDEX user_athlete_declarations_athlete_idx ON user_athlete_declarations 
 -- One sport + season + ruleset. Leagues are created under a competition.
 --
 -- roster_config_json:
---   {"slot_order":           ["PG","SG","SF","PF","C","BENCH"],   -- display order
---    "roster_limits":        {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
---    "position_eligibility": {"PG":["PG","G"], "SG":["SG","G"], ...}}
+--   {"slot_order":           ["G","F","C","BENCH"],   -- display order
+--    "roster_limits":        {"G":2,"F":2,"C":1,"BENCH":6},
+--    "position_eligibility": {"G":["G","PG","SG"], "F":["F","SF","PF"], "C":["C"]}}
 --   BENCH (and IR, if present) accept any athlete of the sport. Any other
 --   slot accepts athletes whose positions[] overlap its eligibility list
 --   (or contain the slot name, if the slot has no list).
 --
--- scoring_rules_json: {"points":1.0,"rebounds":1.2,"assists":1.5,
---                      "steals":3.0,"blocks":3.0,"turnovers":-1.0}
+-- scoring_rules_json, flat:    {"points":1.0,"rebounds":1.2,"assists":1.5,
+--                                "steals":3.0,"blocks":3.0,"turnovers":-1.0}
+--                    grouped: {"passing":{"yards":0.04,"touchdown":4.0}, "misc":{"fumble_lost":-2.0}}
+--
+-- code is the public ruleset id ("usports_football_half_ppr").
 CREATE TABLE competitions (
   id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  code                TEXT        NOT NULL,
   name                TEXT        NOT NULL,
   sport_id            SMALLINT    NOT NULL REFERENCES sports (id) ON DELETE RESTRICT,
   season              TEXT        NOT NULL,
@@ -313,6 +360,8 @@ CREATE TABLE competitions (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT competitions_sport_season_name_key UNIQUE (sport_id, season, name),
+  CONSTRAINT competitions_code_season_key UNIQUE (code, season),
+  CONSTRAINT competitions_code_format CHECK (code ~ '^[a-z0-9_]{3,64}$'),
   CONSTRAINT competitions_season_format CHECK (season ~ '^\d{4}(-\d{2})?$'),
   CONSTRAINT competitions_dates CHECK (ends_on IS NULL OR starts_on IS NULL OR ends_on >= starts_on),
   CONSTRAINT competitions_roster_shape CHECK (
@@ -320,7 +369,7 @@ CREATE TABLE competitions (
     AND jsonb_typeof(coalesce(roster_config_json -> 'position_eligibility', '{}'::jsonb)) = 'object'
   ),
   CONSTRAINT competitions_scoring_shape CHECK (
-    jsonb_is_number_map(scoring_rules_json) AND scoring_rules_json <> '{}'::jsonb
+    jsonb_is_scoring_rules(scoring_rules_json)
   )
 );
 

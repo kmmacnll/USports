@@ -14,9 +14,23 @@ const BASKETBALL = {
   mpg: 'minutes',
 } as const;
 
+const FOOTBALL = {
+  pass_ypg: 'passing_yards',
+  pass_tdpg: 'passing_touchdown',
+  rush_ypg: 'rushing_yards',
+  rush_tdpg: 'rushing_touchdown',
+  rec_pg: 'receiving_receptions',
+  rec_ypg: 'receiving_yards',
+  rec_tdpg: 'receiving_touchdown',
+  fgm_pg: 'kicking_fg_made',
+  tackles_pg: 'defence_tackles',
+  sacks_pg: 'defence_sacks',
+} as const;
+
 export const STAT_SUMMARY: Record<string, Record<string, string>> = {
   usports_mbk: BASKETBALL,
   usports_wbk: BASKETBALL,
+  usports_fb: FOOTBALL,
 };
 
 export function summarizeStats(sportCode: string, averages: Record<string, number> | null): Record<string, number> {

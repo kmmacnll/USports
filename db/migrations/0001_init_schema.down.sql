@@ -27,9 +27,12 @@ DROP FUNCTION IF EXISTS leagues_before_write();
 DROP FUNCTION IF EXISTS league_sport_id(BIGINT);
 DROP FUNCTION IF EXISTS assert_user_may_play_sport(BIGINT, SMALLINT);
 DROP FUNCTION IF EXISTS fantasy_score(JSONB, JSONB);
+DROP FUNCTION IF EXISTS scoring_weights(JSONB);
+DROP FUNCTION IF EXISTS jsonb_is_scoring_rules(JSONB);
 DROP FUNCTION IF EXISTS jsonb_numeric_sum(JSONB);
 DROP FUNCTION IF EXISTS jsonb_is_count_map(JSONB);
 DROP FUNCTION IF EXISTS jsonb_is_number_map(JSONB);
+DROP FUNCTION IF EXISTS usports_current_season(DATE);
 DROP FUNCTION IF EXISTS set_updated_at();
 
 DROP TYPE IF EXISTS athlete_declaration_source;

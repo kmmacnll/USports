@@ -47,13 +47,3 @@ SELECT gs.id, c.id, fantasy_score(gs.raw_stats_json, c.scoring_rules_json)
 UPDATE game_stats gs SET fantasy_points_calculated = fantasy_score(gs.raw_stats_json, c.scoring_rules_json)
   FROM games g, competitions c
  WHERE g.id = gs.game_id AND c.sport_id = g.sport_id AND c.season = g.season AND c.is_default;
-
--- Football: enabled for tests with the product's example roster limits.
-UPDATE sports SET is_active = TRUE WHERE code = 'usports_fb';
-INSERT INTO competitions (name, sport_id, season, roster_config_json, scoring_rules_json, is_default)
-SELECT 'Test Football', id, '2026',
-       '{"slot_order":["QB","RB","WR","K","DEF","BENCH"],
-         "roster_limits":{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4},
-         "position_eligibility":{"DEF":["DL","LB","DB"]}}',
-       '{"passing_yards":0.04,"passing_touchdowns":4}', TRUE
-  FROM sports WHERE code = 'usports_fb';

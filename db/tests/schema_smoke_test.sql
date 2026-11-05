@@ -111,31 +111,36 @@ SELECT c.id, u.id, 'ZZ Hoops', 2
   FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
  WHERE s.code = 'usports_mbk' AND c.is_default AND u.auth_subject = 'zz-commish';
 DO $$ BEGIN
-  ASSERT (SELECT roster_size FROM leagues WHERE name = 'ZZ Hoops') = 6, 'roster_size not derived';
+  ASSERT (SELECT roster_size FROM leagues WHERE name = 'ZZ Hoops') = 11, 'roster_size not derived';
   ASSERT (SELECT roster_limits_json FROM leagues WHERE name = 'ZZ Hoops')
-         = '{"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1}', 'roster limits not copied';
+         = '{"G":2,"F":2,"C":1,"BENCH":6}', 'roster limits not copied';
 END $$;
 
--- Football league with the product's example limits (temporary competition).
-INSERT INTO competitions (name, sport_id, season, roster_config_json, scoring_rules_json)
-SELECT 'ZZ Football', id, '2026',
-       '{"roster_limits":{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4},
-         "position_eligibility":{"DEF":["DL","LB","DB"]}}',
-       '{"passing_yards":0.04}'
-  FROM sports WHERE code = 'usports_fb';
+-- Football league on the seeded Half-PPR ruleset, with the product's example limits.
+DO $$ BEGIN
+  -- grouped rules: 300*0.04 + 2*4 - 2 + 5 - 2 + 1 (rouge) = 22
+  ASSERT fantasy_score('{"passing_yards":300,"passing_touchdown":2,"passing_interception":1,
+                         "kicking_fg_50_plus":1,"misc_fumble_lost":1,"kicking_single_rouge":1}',
+                       (SELECT scoring_rules_json FROM competitions WHERE code = 'usports_football_half_ppr')) = 22.00,
+    'Half-PPR grouped scoring wrong';
+END $$;
+SELECT pg_temp.expect_error($q$
+  INSERT INTO competitions (code, name, sport_id, season, roster_config_json, scoring_rules_json)
+  SELECT 'zz_bad', 'Bad', id, '2026-27', '{"roster_limits":{"QB":1}}', '{"passing":{"yards":"lots"}}'
+    FROM sports WHERE code = 'usports_fb'$q$, '23514');
 INSERT INTO leagues (competition_id, commissioner_id, name, max_teams, roster_size, roster_limits_json)
 SELECT c.id, u.id, 'Vanier Cup Chasers', 10, 15, '{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4}'
-  FROM competitions c, users u WHERE c.name = 'ZZ Football' AND u.auth_subject = 'zz-commish';
+  FROM competitions c, users u WHERE c.code = 'usports_football_half_ppr' AND u.auth_subject = 'zz-commish';
 
 -- roster_size must match the limits; unknown slots are rejected.
 SELECT pg_temp.expect_error($q$
   INSERT INTO leagues (competition_id, commissioner_id, name, roster_size, roster_limits_json)
   SELECT c.id, u.id, 'Bad Size', 14, '{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4}'
-    FROM competitions c, users u WHERE c.name = 'ZZ Football' AND u.auth_subject = 'zz-commish'$q$, '23514');
+    FROM competitions c, users u WHERE c.code = 'usports_football_half_ppr' AND u.auth_subject = 'zz-commish'$q$, '23514');
 SELECT pg_temp.expect_error($q$
   INSERT INTO leagues (competition_id, commissioner_id, name, roster_limits_json)
   SELECT c.id, u.id, 'Bad Slot', '{"QB":1,"GOALIE":1}'
-    FROM competitions c, users u WHERE c.name = 'ZZ Football' AND u.auth_subject = 'zz-commish'$q$, '23514');
+    FROM competitions c, users u WHERE c.code = 'usports_football_half_ppr' AND u.auth_subject = 'zz-commish'$q$, '23514');
 
 -- Terms must be accepted to commission or join.
 SELECT pg_temp.expect_error($q$
@@ -175,9 +180,9 @@ SELECT pg_temp.expect_error($q$
 -- ---------------------------------------------------------------- roster spots
 CREATE TEMP VIEW t AS SELECT id, league_id, team_name FROM fantasy_teams WHERE team_name LIKE 'Team zz-%';
 
--- Guard in PG: ok. Centre in BENCH: ok. Position-less athlete on BENCH: ok.
+-- Guard in G: ok. Centre in BENCH: ok. Position-less athlete on BENCH: ok.
 INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
-SELECT t.id, t.league_id, a.id, 'PG' FROM t, athletes a WHERE t.team_name = 'Team zz-commish' AND a.last_name = 'Point';
+SELECT t.id, t.league_id, a.id, 'G' FROM t, athletes a WHERE t.team_name = 'Team zz-commish' AND a.last_name = 'Point';
 INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
 SELECT t.id, t.league_id, a.id, 'BENCH' FROM t, athletes a WHERE t.team_name = 'Team zz-commish' AND a.last_name = 'Centre';
 INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
@@ -191,7 +196,7 @@ END $$;
 -- Same athlete twice in a league.
 SELECT pg_temp.expect_error($q$
   INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
-  SELECT t.id, t.league_id, a.id, 'SG' FROM t, athletes a WHERE t.team_name = 'Team zz-rival' AND a.last_name = 'Point'$q$, '23505');
+  SELECT t.id, t.league_id, a.id, 'G' FROM t, athletes a WHERE t.team_name = 'Team zz-rival' AND a.last_name = 'Point'$q$, '23505');
 -- Wrong sport.
 SELECT pg_temp.expect_error($q$
   INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
@@ -202,11 +207,11 @@ SELECT pg_temp.expect_error($q$
   UPDATE roster_spots SET position_assigned = 'UTIL'
    WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Sition')$q$, '23514', 'INVALID_SLOT');
 SELECT pg_temp.expect_error($q$
-  UPDATE roster_spots SET slot_index = 2
+  UPDATE roster_spots SET slot_index = 7
    WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Sition')$q$, '23514', 'INVALID_SLOT');
--- Positional eligibility: a position-less athlete can't start; a C can't play PG.
+-- Positional eligibility: a position-less athlete can't start.
 SELECT pg_temp.expect_error($q$
-  UPDATE roster_spots SET position_assigned = 'SF'
+  UPDATE roster_spots SET position_assigned = 'F'
    WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Sition')$q$, '23514', 'INELIGIBLE_POSITION');
 
 -- Team/league mismatch rejected by composite FK.
@@ -215,15 +220,15 @@ SELECT pg_temp.expect_error($q$
   SELECT t.id, (SELECT id FROM leagues WHERE name = 'Vanier Cup Chasers'), a.id, 'BENCH'
     FROM t, athletes a WHERE t.team_name = 'Team zz-rival' AND a.last_name = 'Back'$q$, '23503');
 
--- Swaps run with the slot constraint deferred. Swapping PG <-> BENCH fails here
--- because the bench player (a C) is not PG-eligible.
+-- Swaps run with the slot constraint deferred. Swapping G <-> BENCH fails here
+-- because the bench player (a C) is not G-eligible.
 SET CONSTRAINTS roster_spots_slot_key DEFERRED;
 SELECT pg_temp.expect_error($q$
   UPDATE roster_spots rs SET position_assigned = o.position_assigned, slot_index = o.slot_index
     FROM roster_spots o
    WHERE rs.fantasy_team_id = o.fantasy_team_id AND rs.id <> o.id
      AND rs.fantasy_team_id = (SELECT id FROM t WHERE team_name = 'Team zz-commish')$q$, '23514', 'INELIGIBLE_POSITION');
--- Valid move in one transaction: the C goes BENCH -> C, the guard goes PG -> BENCH.
+-- Valid move in one transaction: the C goes BENCH -> C, the guard goes G -> BENCH.
 UPDATE roster_spots SET position_assigned = 'C'
  WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Centre');
 UPDATE roster_spots SET position_assigned = 'BENCH'

@@ -2,6 +2,9 @@ import type { Queryable } from '../db.js';
 import { HttpError } from '../errors.js';
 import { expandPositions, orderedLimits } from '../sport-display.js';
 
+/** Flat {"points":1} or grouped {"passing":{"yards":0.04}} (scored as passing_yards). */
+export type ScoringRules = Record<string, number | Record<string, number>>;
+
 export interface RosterConfig {
   slot_order?: string[];
   roster_limits: Record<string, number>;
@@ -15,14 +18,16 @@ interface SportRow {
   gender: string;
   is_active: boolean;
   competition_id: string | null;
+  ruleset_id: string | null;
+  ruleset_name: string | null;
   season: string | null;
   roster_config_json: RosterConfig | null;
-  scoring_rules_json: Record<string, number> | null;
+  scoring_rules_json: ScoringRules | null;
 }
 
 const SPORT_SQL = `
   SELECT s.id, s.code, s.name, s.gender, s.is_active,
-         c.id AS competition_id, c.season, c.roster_config_json, c.scoring_rules_json
+         c.id AS competition_id, c.code AS ruleset_id, c.name AS ruleset_name, c.season, c.roster_config_json, c.scoring_rules_json
     FROM sports s
     LEFT JOIN LATERAL (
       SELECT * FROM competitions c
@@ -38,6 +43,8 @@ function formatSport(r: SportRow) {
     gender: r.gender,
     is_active: r.is_active,
     season: r.season,
+    ruleset_id: r.ruleset_id,
+    ruleset_name: r.ruleset_name,
     roster_positions: cfg ? expandPositions(cfg.roster_limits, cfg.slot_order) : null,
     roster_limits: cfg ? orderedLimits(cfg.roster_limits, cfg.slot_order) : null,
     scoring_rules: r.scoring_rules_json,

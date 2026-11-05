@@ -35,7 +35,7 @@ const CreateLeagueBody = z.object({
   max_teams: z.number().int().min(2).max(20).default(10),
   roster_limits: rosterLimits.optional(),
   roster_size: z.number().int().min(1).max(40).optional(),
-  competition_id: z.union([z.string().regex(/^\d+$/), z.number().int().positive()]).transform(String).optional(),
+  ruleset_id: z.string().regex(/^[a-z0-9_]{3,64}$/, 'expected a ruleset id like usports_football_half_ppr').optional(),
   is_private: z.boolean().default(true),
   team_name: z.string().trim().min(1).max(60).optional(),
 });

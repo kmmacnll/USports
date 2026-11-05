@@ -7,7 +7,7 @@ INSERT INTO sports (code, name, gender, is_active) VALUES
   ('usports_wbk',  'Women''s Basketball', 'WOMEN', TRUE),
   ('usports_mhk',  'Men''s Ice Hockey',   'MEN',   FALSE),
   ('usports_whk',  'Women''s Ice Hockey', 'WOMEN', FALSE),
-  ('usports_fb',   'Football',            'MEN',   FALSE),
+  ('usports_fb',   'Football',            'MEN',   TRUE),
   ('usports_mvb',  'Men''s Volleyball',   'MEN',   FALSE),
   ('usports_wvb',  'Women''s Volleyball', 'WOMEN', FALSE),
   ('usports_msoc', 'Men''s Soccer',       'MEN',   FALSE),

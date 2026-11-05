@@ -33,7 +33,10 @@
 | 3 | A declaration is rejected while the user still commissions or plays in a league for that sport. The error names the leagues to leave |
 | 4 | `user_athlete_declarations.athlete_id` and `source = 'VERIFIED'` link a declaration to an ingested roster record |
 
-**Scope choice:** "own sport" means the exact sport (`sports.id`). A men's
-basketball player may play women's basketball fantasy. To block the whole
-discipline across genders instead, compare a shared discipline key in
-`assert_user_may_play_sport()`.
+**Why exactly their own sport:** the rule exists so an athlete can't profit
+from their own performance. That includes deliberately playing badly to help
+a fantasy opponent, or to sink players on a rival's roster. An athlete can
+only influence games in the sport they play. A men's basketball player has
+no effect on a women's basketball game, so "own sport" means the exact sport
+(`sports.id`), and every other sport, including the same discipline in the
+other gender, stays open.
