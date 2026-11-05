@@ -49,11 +49,11 @@ To deploy a different branch instead, change every `branch:` line in
 Render then:
 - creates the database;
 - builds the API (`npm ci --include=dev && npm run build`);
-- starts the API with `npm run migrate && npm start`. The migration step
-  creates the schema and loads the sports, terms and rulesets. On a brand-new
-  Blueprint it waits (up to 3 minutes) for the database to become reachable.
-  If it fails, the new instance never passes its health check and the old
-  version keeps running;
+- starts the API with `npm start`. The server opens its port immediately,
+  then (because `MIGRATE_ON_START=true`) creates the schema and loads the
+  sports, terms and rulesets. It answers `503 starting` until that finishes.
+  On a brand-new Blueprint it waits up to 3 minutes for the database to become
+  reachable. If it fails, the process exits and the old version keeps running;
 - waits for `GET /healthz` to return 200;
 - builds the web app (`npm run build` in `web/`) and points it at the API
   through `API_HOSTPORT`;
@@ -214,6 +214,7 @@ plus a few cents of cron runtime per month. Check current pricing at
 | API deploy log: `Error: getaddrinfo ENOTFOUND dpg-…-a` | The database's internal hostname doesn't resolve. (1) Check that **varsityhq-db** and **varsityhq-api** are in the same region: internal hostnames only resolve within one region. A service can't change region, so delete it and re-sync the Blueprint to recreate it in the database's region (`virginia` in render.yaml). (2) Or set `MIGRATE_DATABASE_URL` on varsityhq-api to the database's **External Database URL** plus `?sslmode=require`. That only fixes migrations, though; the running API also uses the internal URL, so a region mismatch still has to be fixed |
 | Web service fails right after the API fails | varsityhq-web gets `API_HOSTPORT` from varsityhq-api. Fix the API first, then **Manual Deploy** the web service |
 | Migration step fails | The deploy log shows the SQL error. The previous version keeps serving |
+| `No open ports detected … Exited with status 1` | The process stopped before listening. The real error is a few lines **above** this message, e.g. `✗ startup aborted: Invalid environment …` (a malformed env var; blank values are fine) or a migration error |
 | API won't start: `Configure JWT_SECRET or JWT_JWKS_URL` | Set one of them on varsityhq-api → Environment |
 | Cron: `Failed to retrieve release data: 403` | The run is missing `--no-season-check`. usportspy's season lookup hits the GitHub API, which is rate-limited per IP, and Render IPs are shared |
 | Roster job: many `roster fetch failed … 429` | usports.ca is rate-limiting. The scraper already waits 1 s between requests; raise `REQUEST_INTERVAL_S` in `pipeline/usports_pipeline/rosters.py` |

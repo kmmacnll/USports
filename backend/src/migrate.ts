@@ -15,7 +15,7 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import pg from 'pg';
 
@@ -69,13 +69,23 @@ async function sqlFiles(dir: string, suffix: string): Promise<string[]> {
   return (await readdir(dir)).filter((f) => f.endsWith(suffix)).sort();
 }
 
-async function main() {
-  const url = process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL;
+export interface MigrateOptions {
+  url: string;
+  seed?: boolean;
+  timeoutS?: number;
+}
+
+/** Options from the environment (shared by the CLI and the server's startup migration). */
+export function migrateOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): MigrateOptions {
+  const url = env.MIGRATE_DATABASE_URL || env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set');
-  const seed = !process.argv.includes('--no-seed');
-  const timeoutS = Number(process.env.MIGRATE_CONNECT_TIMEOUT_S ?? 180);
+  const timeoutS = Number(env.MIGRATE_CONNECT_TIMEOUT_S || 180);
+  return { url, timeoutS: Number.isFinite(timeoutS) ? timeoutS : 180 };
+}
+
+export async function runMigrations({ url, seed = true, timeoutS = 180 }: MigrateOptions): Promise<void> {
   console.log(`→ migrating ${describe(url)}`);
-  const client = await connectWithRetry(url, Number.isFinite(timeoutS) ? timeoutS : 180);
+  const client = await connectWithRetry(url, timeoutS);
   try {
     await client.query('SET client_min_messages = warning');
     await client.query('SELECT pg_advisory_lock($1)', [LOCK_KEY]);
@@ -106,7 +116,10 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// CLI entry point (`npm run migrate`); skipped when imported by the server.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runMigrations({ ...migrateOptionsFromEnv(), seed: !process.argv.includes('--no-seed') }).catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
