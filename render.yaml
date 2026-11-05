@@ -21,12 +21,17 @@ services:
     name: varsityhq-api
     runtime: node
     region: ohio
-    plan: starter              # pre-deploy commands need a paid instance
+    plan: starter
     branch: main
     autoDeploy: true           # deploy on every push to main
     buildCommand: cd backend && npm ci --include=dev && npm run build
-    preDeployCommand: cd backend && npm run migrate     # migrations + seeds; a failure keeps the old version live
-    startCommand: cd backend && npm start
+    # Migrations + seeds run at start, not as a pre-deploy command: the running
+    # service is guaranteed private-network access to the database (internal
+    # dpg-… hostname), and the runner waits up to 3 min for a database that is
+    # still provisioning. If a migration fails, the instance never becomes
+    # healthy and Render keeps the previous version live. An advisory lock
+    # stops multiple instances migrating at once.
+    startCommand: cd backend && npm run migrate && npm start
     healthCheckPath: /healthz
     buildFilter:
       paths: [backend/**, db/**]
@@ -50,6 +55,11 @@ services:
       - key: JWT_ISSUER
         sync: false
       - key: JWT_AUDIENCE
+        sync: false
+      # Optional escape hatch: if the internal hostname can't be resolved (e.g.
+      # the database is in another region), set this to the External Database
+      # URL with ?sslmode=require. Leave blank normally.
+      - key: MIGRATE_DATABASE_URL
         sync: false
 
   # ------------------------------------------------------------ Web app
