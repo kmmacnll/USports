@@ -24,8 +24,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const [leagues, games, top] = await Promise.all([
     me ? loadMyLeagues(me) : Promise.resolve([]),
-    activeSport ? api<{ data: Game[] }>('/games', { auth: false, query: { sport: activeSport } }) : Promise.resolve({ data: [] }),
-    activeSport ? api<Paginated<Athlete>>('/athletes', { auth: false, query: { sport: activeSport, page_size: 8 } }) : null,
+    activeSport ? api<{ data: Game[] }>('/games', { auth: false, query: { sport_id: activeSport } }) : Promise.resolve({ data: [] }),
+    activeSport ? api<Paginated<Athlete>>('/athletes', { auth: false, query: { sport_id: activeSport, page_size: 8 } }) : null,
   ]);
   const myUniversities = new Set(leagues.filter((l) => l.league.sport === activeSport).flatMap((l) => l.universities));
   const shownGames = pickGames(games.data, myUniversities, 12);

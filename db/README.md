@@ -6,7 +6,9 @@ pipeline and the Node API both read and write this schema. Neither one owns it.
 ```
 db/
 ├── migrate.sh                         # up | down | seed | status
-├── migrations/0001_init_schema.{up,down}.sql
+├── migrations/
+│   ├── 0001_init_schema.{up,down}.sql
+│   └── 0002_multi_sport.{up,down}.sql   # season_type, stat_payload_json, '*' eligibility
 ├── seeds/                             # idempotent reference data
 │   ├── 0001_sports.sql
 │   ├── 0002_terms.sql
@@ -32,7 +34,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/schema_smoke_test.sql
    athletes ◄── athlete_source_ids (every usports.ca id / name key seen)
         ▲
    game_stats ──► games ──► sports
-        │ raw_stats_json {"points":20,"rebounds":5,...}
+        │ stat_payload_json {"points":20,"rebounds":5,...}
         ▼
  FANTASY (API writes)
    game_stat_fantasy_points ◄── competitions (sport+season+ruleset) ──► sports
@@ -58,9 +60,11 @@ usports.ca ids, which change every season.
 | team | `tm_3` | `fantasy_teams.id` |
 | ruleset | `usports_football_half_ppr` | `competitions.code` |
 
-Sport codes: `usports_mbk`, `usports_wbk`, `usports_fb` (active);
-`usports_mhk`, `usports_whk`, `usports_mvb`, `usports_wvb`, `usports_msoc`,
-`usports_wsoc` (catalogued, not yet ingested).
+Active sport codes: `usports_mbk`, `usports_wbk`, `usports_fb`, `usports_mhk`,
+`usports_whk`, `usports_mvb`, `usports_wvb`, `usports_msoc`, `usports_wsoc`.
+Catalogued but inactive (no per-game data source): field hockey, rugby, track
+& field, cross-country, swimming, wrestling, curling. Each sport has a
+`season_type` (`FALL`, `WINTER` or `SPRING`).
 
 ## JSON contracts
 
@@ -70,18 +74,21 @@ Sport codes: `usports_mbk`, `usports_wbk`, `usports_fb` (active);
 **`competitions.scoring_rules_json`** is either flat or grouped one level deep.
 A grouped rule scores the stat key `<group>_<stat>`. Scoring is computed in
 the database by `fantasy_score(stats, rules)`, and the stat keys match
-`game_stats.raw_stats_json`.
+`game_stats.stat_payload_json`.
 ```json
 {"points":1.0,"rebounds":1.2,"assists":1.5,"steals":3.0,"blocks":3.0,"turnovers":-1.0}
 {"passing":{"yards":0.04,"touchdown":4.0,"interception":-2.0,"two_point":2.0},
  "kicking":{"fg_0_39":3.0,"fg_40_49":4.0,"fg_50_plus":5.0,"pat":1.0,"single_rouge":1.0,"fg_missed":-1.0},
- "misc":{"fumble_lost":-2.0}, ...}          // passing.yards scores raw_stats_json.passing_yards
+ "misc":{"fumble_lost":-2.0}, ...}          // passing.yards scores stat_payload_json.passing_yards
 ```
 
 | Ruleset | Roster (starters + bench) |
 |---|---|
 | `usports_mbk_standard`, `usports_wbk_standard` | G 2, F 2, C 1 + BENCH 6 = 11 |
 | `usports_football_half_ppr` | QB 2, RB 3, WR 4, K 1, DEF 1 + BENCH 4 = 15 |
+| `usports_mhk_standard`, `usports_whk_standard` *(provisional)* | F 3, D 2, G 1 + BENCH 4 = 10 |
+| `usports_mvb_standard`, `usports_wvb_standard` *(provisional)* | PLAYER 6 (`*` = anyone) + BENCH 4 = 10 |
+| `usports_msoc_standard`, `usports_wsoc_standard` *(provisional)* | GK 1, D 3, M 3, F 2 + BENCH 4 = 13 |
 
 Basketball eligibility is generic: G accepts G/PG/SG, F accepts F/SF/PF, C accepts C.
 Football's `DEF` slot has no scoring rules yet, so it scores 0.
@@ -94,7 +101,9 @@ Football's `DEF` slot has no scoring rules yet, so it scores 0.
 ```
 `slot_order` keeps the display order, because jsonb objects don't preserve key
 order. A starter slot accepts athletes whose `athletes.positions` overlap its
-eligibility list. `BENCH` (and `IR`) accept any athlete in the sport.
+eligibility list. `"*"` in a slot's list means any athlete in the sport,
+for feeds with no positions (volleyball). `BENCH` (and `IR`) accept any
+athlete in the sport.
 
 **`leagues.roster_limits_json` / `roster_size`**: these default to the
 competition's limits and can be overridden per league. `roster_size` must

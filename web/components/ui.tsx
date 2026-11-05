@@ -28,7 +28,11 @@ export const fmt = (v: number | null | undefined, digits = 1) =>
   v === null || v === undefined ? '—' : Number.isInteger(v) ? String(v) : v.toFixed(digits);
 
 export function SportBadge({ sport, name }: { sport: string; name?: string }) {
-  const short: Record<string, string> = { usports_mbk: "M BBALL", usports_wbk: "W BBALL", usports_fb: 'FOOTBALL' };
+  const short: Record<string, string> = {
+    usports_mbk: 'M BBALL', usports_wbk: 'W BBALL', usports_fb: 'FOOTBALL',
+    usports_mhk: 'M HOCKEY', usports_whk: 'W HOCKEY', usports_mvb: 'M VOLLEY', usports_wvb: 'W VOLLEY',
+    usports_msoc: 'M SOCCER', usports_wsoc: 'W SOCCER',
+  };
   return (
     <span className="rounded-md border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-accent" title={name}>
       {short[sport] ?? sport.replace('usports_', '').toUpperCase()}

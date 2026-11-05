@@ -6,12 +6,14 @@ export interface Sport {
   sport_id: string;
   sport_name: string;
   gender: string;
+  season_type: 'FALL' | 'WINTER' | 'SPRING';
   is_active: boolean;
   season: string | null;
   ruleset_id: string | null;
   ruleset_name: string | null;
   roster_positions: string[] | null;
   roster_limits: Record<string, number> | null;
+  position_eligibility: Record<string, string[]> | null;
   scoring_rules: Record<string, number | Record<string, number>> | null;
   stat_columns: { season: StatColumn[]; game: StatColumn[] };
 }

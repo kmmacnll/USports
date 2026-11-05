@@ -58,14 +58,14 @@ SELECT s.id, 'zz-g1', '2026-27', '2026-27', '2026-11-07', a.id, b.id, 'FINAL'
   FROM sports s, universities a, universities b
  WHERE s.code = 'usports_mbk' AND a.slug = 'zz-test-a' AND b.slug = 'zz-test-b';
 
-INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, raw_stats_json)
+INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, stat_payload_json)
 SELECT at.id, g.id, g.game_date, g.home_university_id, g.away_university_id, '{"points":10}'
   FROM athletes at, games g WHERE at.last_name = 'Point' AND g.source_game_id = 'zz-g1';
-INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, raw_stats_json)
+INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, stat_payload_json)
 SELECT at.id, g.id, g.game_date, g.home_university_id, g.away_university_id, '{"points":20,"rebounds":5}'
   FROM athletes at, games g WHERE at.last_name = 'Point' AND g.source_game_id = 'zz-g1'
-ON CONFLICT (athlete_id, game_id) DO UPDATE SET raw_stats_json = EXCLUDED.raw_stats_json;
-UPDATE game_stats SET fantasy_points_calculated = fantasy_score(raw_stats_json, '{"points":1,"rebounds":1.2}')
+ON CONFLICT (athlete_id, game_id) DO UPDATE SET stat_payload_json = EXCLUDED.stat_payload_json;
+UPDATE game_stats SET fantasy_points_calculated = fantasy_score(stat_payload_json, '{"points":1,"rebounds":1.2}')
  WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Point');
 DO $$ BEGIN
   ASSERT (SELECT count(*) FROM game_stats gs JOIN athletes a ON a.id = gs.athlete_id WHERE a.last_name = 'Point') = 1,
@@ -237,6 +237,30 @@ SET CONSTRAINTS roster_spots_slot_key IMMEDIATE;
 DO $$ BEGIN
   ASSERT (SELECT position_assigned FROM roster_spots rs JOIN athletes a ON a.id = rs.athlete_id
            WHERE a.last_name = 'Centre') = 'C', 'swap failed';
+END $$;
+
+-- ---------------------------------------------------------------- multi-sport (0002)
+DO $$ BEGIN
+  ASSERT (SELECT season_type FROM sports WHERE code = 'usports_fb') = 'FALL', 'football should be FALL';
+  ASSERT (SELECT season_type FROM sports WHERE code = 'usports_mhk') = 'WINTER', 'hockey should be WINTER';
+  ASSERT NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'game_stats' AND column_name = 'raw_stats_json'), 'old column still present';
+END $$;
+
+-- '*' eligibility: a position-less volleyball athlete can start in a PLAYER slot.
+INSERT INTO athletes (first_name, last_name, university_id, sport_id)
+SELECT 'Vic', 'Volley', u.id, s.id FROM universities u, sports s WHERE u.slug = 'zz-test-a' AND s.code = 'usports_mvb';
+INSERT INTO leagues (competition_id, commissioner_id, name)
+SELECT c.id, u.id, 'ZZ Volley' FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
+ WHERE s.code = 'usports_mvb' AND c.is_default AND u.auth_subject = 'zz-rival';
+INSERT INTO fantasy_teams (league_id, user_id, team_name)
+SELECT l.id, u.id, 'ZZ Volley Team' FROM leagues l, users u WHERE l.name = 'ZZ Volley' AND u.auth_subject = 'zz-rival';
+INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
+SELECT t.id, t.league_id, a.id, 'PLAYER' FROM fantasy_teams t, athletes a
+ WHERE t.team_name = 'ZZ Volley Team' AND a.last_name = 'Volley';
+DO $$ BEGIN
+  ASSERT (SELECT slot_type FROM roster_spots rs JOIN athletes a ON a.id = rs.athlete_id WHERE a.last_name = 'Volley')
+         = 'STARTER', 'wildcard slot should accept a position-less athlete';
 END $$;
 
 \echo 'schema smoke test: ALL PASSED'

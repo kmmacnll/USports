@@ -66,12 +66,12 @@ describe('GET /api/v1/sports', () => {
       },
     });
     expect(Object.keys(fb.roster_limits)).toEqual(['QB', 'RB', 'WR', 'K', 'DEF', 'BENCH']);
-    expect(res.body.data.map((s: { sport_id: string }) => s.sport_id)).not.toContain('usports_mhk');
+    expect(res.body.data.map((s: { sport_id: string }) => s.sport_id)).not.toContain('usports_mtf');
   });
 
   it('includes inactive sports on request', async () => {
     const res = await request(app).get('/api/v1/sports?include_inactive=true').expect(200);
-    expect(res.body.data.map((s: { sport_id: string }) => s.sport_id)).toContain('usports_mhk');
+    expect(res.body.data.map((s: { sport_id: string }) => s.sport_id)).toContain('usports_mtf');
   });
 });
 
@@ -248,7 +248,7 @@ describe('leagues', () => {
     }).expect(422);
     expect(unknownSlot.body.error.code).toBe('INVALID_SLOT');
     const inactive = await request(app).post('/api/v1/leagues').set(as('commish'))
-      .send({ league_name: 'Ice', sport: 'usports_mhk' }).expect(422);
+      .send({ league_name: 'Track', sport: 'usports_mtf' }).expect(422);
     expect(inactive.body.error.code).toBe('SPORT_INACTIVE');
   });
 

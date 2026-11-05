@@ -12,14 +12,25 @@ import {
 import { acceptTerms, getMe } from '../services/me.js';
 import { listSports } from '../services/sports.js';
 
-const sportCode = z.string({ error: 'sport is required, e.g. usports_mbk' }).regex(/^usports_[a-z]+$/, 'expected a sport id like usports_mbk');
+const sportCode = z.string({ error: 'sport_id is required, e.g. usports_mhk' })
+  .regex(/^usports_[a-z]+$/, 'expected a sport id like usports_mhk');
+
+/**
+ * `sport_id` is the query parameter for choosing a sport (usports_mhk,
+ * usports_mvb, ...). `sport` is accepted as an alias for older clients.
+ */
+const sportIdAlias = (q: unknown) => {
+  if (!q || typeof q !== 'object') return q;
+  const { sport_id: sportId, ...rest } = q as Record<string, unknown>;
+  return sportId === undefined ? rest : { ...rest, sport: sportId };
+};
 const slotName = z.string().trim().min(1).max(10).regex(/^[A-Za-z]+$/, 'slot names are letters only');
 const rosterLimits = z.record(
   z.string().regex(/^[A-Z]{1,10}$/, 'slot names are upper-case letters, e.g. QB or BENCH'),
   z.number().int().min(0).max(15),
 ).refine((m) => Object.keys(m).length > 0, 'roster_limits must not be empty');
 
-const AthleteQuery = z.object({
+const AthleteQueryBase = z.object({
   sport: sportCode,
   university: z.string().trim().min(1).max(64).optional(),
   q: z.string().trim().min(1).max(64).optional(),
@@ -31,15 +42,24 @@ const AthleteQuery = z.object({
   page_size: z.coerce.number().int().min(1).max(100).default(25),
 });
 
-const AvailableQuery = AthleteQuery.omit({ sport: true, season: true });
+const AthleteQuery = z.preprocess(sportIdAlias, AthleteQueryBase);
+const AvailableQuery = AthleteQueryBase.omit({ sport: true, season: true });
+
+const SportsQuery = z.preprocess(sportIdAlias, z.object({
+  sport: sportCode.optional(),
+  season_type: z.enum(['FALL', 'WINTER', 'SPRING', 'fall', 'winter', 'spring']).transform((v) => v.toUpperCase()).optional(),
+  include_inactive: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+}));
+
+const UniversitiesQuery = z.preprocess(sportIdAlias, z.object({ sport: sportCode.optional() }));
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
-const GamesQuery = z.object({
+const GamesQuery = z.preprocess(sportIdAlias, z.object({
   sport: sportCode,
   from: isoDate.optional(),
   to: isoDate.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
-});
+}));
 
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
@@ -80,9 +100,12 @@ const TermsBody = z.object({
 /** Public reference data: no login needed. */
 export function publicRouter(db: Db): Router {
   const r = Router();
+  // ?sport_id=usports_mhk returns just that sport (404 if unknown);
+  // ?season_type=FALL|WINTER|SPRING filters; ?include_inactive=true adds catalogued sports.
   r.get('/sports', async (req, res) => {
-    const includeInactive = req.query.include_inactive === 'true';
-    res.json({ data: await listSports(db, includeInactive) });
+    const q = SportsQuery.parse(req.query);
+    res.json({ data: await listSports(db, { includeInactive: q.include_inactive || !!q.sport,
+      sportId: q.sport, seasonType: q.season_type }) });
   });
 
   r.get('/athletes', async (req, res) => {
@@ -98,7 +121,7 @@ export function publicRouter(db: Db): Router {
   });
 
   r.get('/universities', async (req, res) => {
-    const sport = req.query.sport === undefined ? undefined : sportCode.parse(req.query.sport);
+    const { sport } = UniversitiesQuery.parse(req.query);
     res.json({ data: await listUniversities(db, sport) });
   });
 

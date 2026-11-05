@@ -1,7 +1,7 @@
 /**
  * Per-sport presentation of season stats: maps short public keys
  * (ppg, rpg, ...) to the per-game averages of canonical stat keys written by
- * the pipeline (game_stats.raw_stats_json). Sports without an entry return
+ * the pipeline (game_stats.stat_payload_json). Sports without an entry return
  * every averaged stat under its canonical key.
  */
 const BASKETBALL = {
@@ -45,6 +45,39 @@ export const STAT_COLUMNS: Record<string, { season: StatColumn[]; game: StatColu
       { key: 'turnovers', label: 'TO' },
     ],
   },
+  hockey: {
+    season: [
+      { key: 'gpg', label: 'G/GP' }, { key: 'apg', label: 'A/GP' }, { key: 'pm', label: '+/-' },
+      { key: 'sog', label: 'SOG' }, { key: 'svpg', label: 'SV/GP' }, { key: 'gapg', label: 'GA/GP' },
+    ],
+    game: [
+      { key: 'goals', label: 'G' }, { key: 'assists', label: 'A' }, { key: 'plus_minus', label: '+/-' },
+      { key: 'shots', label: 'SOG' }, { key: 'penalty_minutes', label: 'PIM' }, { key: 'saves', label: 'SV' },
+      { key: 'goals_allowed', label: 'GA' },
+    ],
+  },
+  volleyball: {
+    season: [
+      { key: 'kpg', label: 'K/M' }, { key: 'dpg', label: 'D/M' }, { key: 'apg', label: 'A/M' },
+      { key: 'acepg', label: 'ACE/M' }, { key: 'bpg', label: 'BLK/M' }, { key: 'sets', label: 'SETS/M' },
+    ],
+    game: [
+      { key: 'sets_played', label: 'SETS' }, { key: 'kills', label: 'K' }, { key: 'attack_errors', label: 'E' },
+      { key: 'assists', label: 'A' }, { key: 'service_aces', label: 'SA' }, { key: 'digs', label: 'DIG' },
+      { key: 'block_solos', label: 'BS' }, { key: 'block_assists', label: 'BA' },
+    ],
+  },
+  soccer: {
+    season: [
+      { key: 'gpg', label: 'G/GP' }, { key: 'apg', label: 'A/GP' }, { key: 'sogpg', label: 'SOG/GP' },
+      { key: 'mpg', label: 'MIN' }, { key: 'svpg', label: 'SV/GP' },
+    ],
+    game: [
+      { key: 'minutes', label: 'MIN' }, { key: 'goals', label: 'G' }, { key: 'assists', label: 'A' },
+      { key: 'shots', label: 'SH' }, { key: 'shots_on_goal', label: 'SOG' }, { key: 'saves', label: 'SV' },
+      { key: 'yellow_cards', label: 'YC' },
+    ],
+  },
   football: {
     season: [
       { key: 'pass_ypg', label: 'PASS YPG' }, { key: 'rush_ypg', label: 'RUSH YPG' },
@@ -63,6 +96,12 @@ const COLUMN_SET: Record<string, keyof typeof STAT_COLUMNS> = {
   usports_mbk: 'basketball',
   usports_wbk: 'basketball',
   usports_fb: 'football',
+  usports_mhk: 'hockey',
+  usports_whk: 'hockey',
+  usports_mvb: 'volleyball',
+  usports_wvb: 'volleyball',
+  usports_msoc: 'soccer',
+  usports_wsoc: 'soccer',
 };
 
 export function statColumns(sportCode: string): { season: StatColumn[]; game: StatColumn[] } {
@@ -70,10 +109,30 @@ export function statColumns(sportCode: string): { season: StatColumn[]; game: St
   return set ? STAT_COLUMNS[set]! : { season: [], game: [] };
 }
 
+const HOCKEY = {
+  gpg: 'goals', apg: 'assists', pm: 'plus_minus', sog: 'shots', pimpg: 'penalty_minutes',
+  svpg: 'saves', gapg: 'goals_allowed',
+} as const;
+
+// Per-match ("/M") averages: U Sports volleyball box scores are per match.
+const VOLLEYBALL = {
+  kpg: 'kills', dpg: 'digs', apg: 'assists', acepg: 'service_aces', bpg: 'block_solos', sets: 'sets_played',
+} as const;
+
+const SOCCER = {
+  gpg: 'goals', apg: 'assists', sogpg: 'shots_on_goal', mpg: 'minutes', svpg: 'saves', gapg: 'goals_against',
+} as const;
+
 export const STAT_SUMMARY: Record<string, Record<string, string>> = {
   usports_mbk: BASKETBALL,
   usports_wbk: BASKETBALL,
   usports_fb: FOOTBALL,
+  usports_mhk: HOCKEY,
+  usports_whk: HOCKEY,
+  usports_mvb: VOLLEYBALL,
+  usports_wvb: VOLLEYBALL,
+  usports_msoc: SOCCER,
+  usports_wsoc: SOCCER,
 };
 
 export function summarizeStats(sportCode: string, averages: Record<string, number> | null): Record<string, number> {
@@ -115,7 +174,8 @@ export function isStarterSlot(slot: string): boolean {
 export function isEligible(slot: string, positions: string[], eligibility: Record<string, string[]> | undefined): boolean {
   if (!isStarterSlot(slot)) return true;
   const allowed = [...(eligibility?.[slot] ?? []), slot];
-  return positions.some((p) => allowed.includes(p));
+  // '*' = any athlete of the sport (sports whose feeds publish no positions).
+  return allowed.includes('*') || positions.some((p) => allowed.includes(p));
 }
 
 export function currentSeason(today = new Date()): string {
