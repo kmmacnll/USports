@@ -1,22 +1,30 @@
-import { KeyRound } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import type { Metadata } from 'next';
 
-import { DevSignInForm, TokenSignInForm } from '@/components/sign-in-forms';
-import { devSignInEnabled } from '@/lib/session';
+import { DevSignInForm, PinSignInForm, TokenSignInForm } from '@/components/sign-in-forms';
+import { devSignInEnabled, getRememberedName } from '@/lib/session';
 
 export const metadata: Metadata = { title: 'Sign in' };
+export const dynamic = 'force-dynamic';
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const rememberedName = await getRememberedName();
   return (
-    <div className="mx-auto mt-10 max-w-lg space-y-6">
+    <div className="mx-auto mt-10 max-w-sm space-y-6">
       <div className="glass p-6">
-        <h1 className="flex items-center gap-2 text-xl font-bold"><KeyRound className="size-5 text-accent" /> Sign in</h1>
-        <p className="mt-2 text-sm text-slate-400">
-          VarsityHQ doesn&apos;t have account sign-up yet. For now, paste an API access token (your admin can mint one with{' '}
-          <code className="text-slate-300">npm run token</code>). It&apos;s stored in a secure, httpOnly cookie.
-        </p>
-        <div className="mt-5"><TokenSignInForm /></div>
+        <div className="mb-5 flex flex-col items-center text-center">
+          <span className="grid size-11 place-items-center rounded-xl bg-accent text-slate-950"><Shield className="size-6" strokeWidth={2.5} /></span>
+          <h1 className="mt-3 text-xl font-bold">{rememberedName ? `Welcome back, ${rememberedName.split(' ')[0]}` : 'Enter VarsityHQ'}</h1>
+          <p className="mt-1 text-sm text-slate-400">Enter the access PIN to continue.</p>
+        </div>
+        <PinSignInForm rememberedName={rememberedName} />
       </div>
+
+      <details className="glass p-4 text-sm">
+        <summary className="cursor-pointer text-slate-400 hover:text-slate-200">Advanced: sign in with an access token</summary>
+        <div className="mt-4"><TokenSignInForm /></div>
+      </details>
+
       {devSignInEnabled() && (
         <div className="glass border-amber-500/30 p-6">
           <p className="text-sm font-semibold text-amber-300">Local development</p>

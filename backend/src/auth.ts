@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { createRemoteJWKSet, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from 'jose';
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from 'jose';
 
 import type { Config } from './config.js';
 import type { Db } from './db.js';
@@ -32,8 +32,14 @@ export function authenticate(cfg: Config, db: Db): RequestHandler {
 
   async function verify(token: string): Promise<JWTPayload> {
     try {
+      // HS256 tokens are minted by this API itself (PIN sign-in, npm run token)
+      // and are always checked against JWT_SECRET, even when an identity
+      // provider (JWKS) is also configured.
+      const alg = decodeProtectedHeader(token).alg;
+      if (alg === 'HS256' && secret) {
+        return (await jwtVerify(token, secret, { algorithms: ['HS256'] })).payload;
+      }
       if (jwks) return (await jwtVerify(token, jwks, verifyOpts)).payload;
-      if (secret) return (await jwtVerify(token, secret, { ...verifyOpts, algorithms: ['HS256'] })).payload;
     } catch {
       throw new HttpError(401, 'INVALID_TOKEN', 'Invalid or expired token');
     }
