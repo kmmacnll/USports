@@ -18,6 +18,13 @@ What gets deployed (all defined in [`render.yaml`](../render.yaml)):
 
 ---
 
+> **Region:** every resource in `render.yaml` uses `virginia`. They must all
+> be in the **same region as the database**, because its internal hostname
+> (`dpg-…-a`) only resolves within that region. A mismatch shows up as
+> `getaddrinfo ENOTFOUND dpg-…-a` in the API's deploy log. Neither a service's
+> nor a database's region can be changed after creation, so a resource in the
+> wrong region has to be deleted and recreated by the Blueprint.
+
 ## 1. Put the code on `main`
 
 The Blueprint deploys from `main` (`branch: main` in `render.yaml`). Merge the
@@ -204,7 +211,7 @@ plus a few cents of cron runtime per month. Check current pricing at
 | Symptom | Fix |
 |---|---|
 | Build: `tsc: not found` | The build must use `npm ci --include=dev`, because `NODE_ENV=production` skips dev dependencies |
-| API deploy log: `Error: getaddrinfo ENOTFOUND dpg-…-a` | The database's internal hostname doesn't resolve. (1) Check that **varsityhq-db** and **varsityhq-api** are in the same region: internal hostnames only resolve within one region. A service can't change region, so delete it and re-sync the Blueprint to recreate it in `ohio`. (2) Or set `MIGRATE_DATABASE_URL` on varsityhq-api to the database's **External Database URL** plus `?sslmode=require`. That only fixes migrations, though; the running API also uses the internal URL, so a region mismatch still has to be fixed |
+| API deploy log: `Error: getaddrinfo ENOTFOUND dpg-…-a` | The database's internal hostname doesn't resolve. (1) Check that **varsityhq-db** and **varsityhq-api** are in the same region: internal hostnames only resolve within one region. A service can't change region, so delete it and re-sync the Blueprint to recreate it in the database's region (`virginia` in render.yaml). (2) Or set `MIGRATE_DATABASE_URL` on varsityhq-api to the database's **External Database URL** plus `?sslmode=require`. That only fixes migrations, though; the running API also uses the internal URL, so a region mismatch still has to be fixed |
 | Web service fails right after the API fails | varsityhq-web gets `API_HOSTPORT` from varsityhq-api. Fix the API first, then **Manual Deploy** the web service |
 | Migration step fails | The deploy log shows the SQL error. The previous version keeps serving |
 | API won't start: `Configure JWT_SECRET or JWT_JWKS_URL` | Set one of them on varsityhq-api → Environment |
