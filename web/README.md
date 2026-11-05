@@ -20,7 +20,7 @@ npm run build && npm start      # production
 | `/` | Dashboard: your leagues (rank, roster points, fill), create and join a league, terms acceptance, real U Sports games (last 3 days and next 4, with your rostered players' teams marked), and the top performers by FP/G |
 | `/leagues/[id]` | League header and invite code; roster grid split into Starters and Bench. Drag a player onto a slot, or tap a player and then a highlighted slot; occupied slots swap. Also: player stat popovers, drop, a free-agent search to add players, and a teams list (click a team to view its roster) |
 | `/players` | Player directory: search, then filter by university, conference and position; sort; paginate; click a name for the stat popover. The URL holds all filters, so views can be shared |
-| `/login` | Paste an API token (until real sign-in exists). In local dev, you can also "continue as" any name |
+| `/login` | Name + shared access PIN (the API's `ACCESS_PIN`); the name is remembered per device. Also: an "Advanced" option to paste an API token, and in local dev, "continue as" any name |
 
 ## How it talks to the API
 

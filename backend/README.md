@@ -26,6 +26,7 @@ For safety, the test database name must contain "test".
 |---|---|---|---|
 | GET | `/sports` | – | Supported sports with their default `ruleset_id`, roster positions and scoring rules (`?include_inactive=true` adds the rest) |
 | GET | `/athletes?sport=usports_mbk` | – | Search athletes with season stats. Filters: `university` (slug or id), `q` (name prefix), `position`, `season`. Also `sort=fantasy_points\|name`, `page`, `page_size` (≤100) |
+| POST | `/auth/pin` | – | `{ pin, name }` → a 30-day bearer token for the account `pin:<name>`. Enabled by `ACCESS_PIN`; wrong PINs are rate limited (5 per address and 50 overall per 15 min) |
 | GET | `/me` | ✓ | Profile, terms status, declared athlete sports, teams |
 | PUT | `/me/terms` | ✓ | Accept the current T&C and answer the U Sports athlete question |
 | POST | `/leagues` | ✓ | Create a league. Optional `ruleset_id` (defaults to the sport's default ruleset), `roster_limits` and `roster_size`. Optional `team_name` also creates the commissioner's team |

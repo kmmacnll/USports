@@ -7,6 +7,7 @@ import type { Config } from './config.js';
 import type { Db } from './db.js';
 import { errorHandler, notFoundHandler } from './errors.js';
 import { apiRouter, publicRouter } from './routes/index.js';
+import { pinAuthRouter } from './pin-auth.js';
 
 /**
  * `isReady` lets the server accept connections (so the host sees an open port)
@@ -37,6 +38,7 @@ export function createApp(cfg: Config, db: Db, logger: Logger, isReady: () => bo
       .json({ error: { code: 'STARTING', message: 'The API is starting up; try again shortly' } });
   });
 
+  app.use('/api/v1', pinAuthRouter(cfg));
   app.use('/api/v1', publicRouter(db));
   app.use('/api/v1', authenticate(cfg, db), apiRouter(db));
 

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { api, ApiError } from './api';
-import { clearSession, devSignInEnabled, setDevUser, setToken } from './session';
+import { clearSession, devSignInEnabled, rememberName, setDevUser, setToken } from './session';
 import type { ActionResult, AthleteDetail, Athlete, League, Paginated, Roster } from './types';
 
 async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
@@ -17,6 +17,16 @@ async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
 }
 
 // ---- session
+
+export async function signInWithPin(_: unknown, form: FormData): Promise<ActionResult> {
+  const name = String(form.get('name') ?? '').trim();
+  const pin = String(form.get('pin') ?? '').trim();
+  const result = await run(() => api<{ token: string }>('/auth/pin', { method: 'POST', auth: false, body: { name, pin } }));
+  if (!result.ok) return result;
+  await setToken(result.data.token);
+  await rememberName(name);
+  redirect('/');
+}
 
 export async function signInWithToken(_: unknown, form: FormData): Promise<ActionResult> {
   const token = String(form.get('token') ?? '').trim();
