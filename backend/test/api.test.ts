@@ -118,6 +118,45 @@ describe('GET /api/v1/athletes', () => {
   });
 });
 
+describe('reference endpoints', () => {
+  it('returns one athlete with season stats and a game log (exhibitions unscored)', async () => {
+    const res = await request(app).get(`/api/v1/athletes/${await athleteId('Guard')}`).expect(200);
+    expect(res.body).toMatchObject({ last_name: 'Guard', season: '2026-27', stats: { games_played: 2, ppg: 15 } });
+    expect(res.body.games.map((g: { date: string }) => g.date)).toEqual(['2026-11-03', '2026-11-01', '2026-08-01']);
+    expect(res.body.games[0]).toMatchObject({ opponent: 'Beta U', home: true, result: 'W 80-70', fantasy_points: 16 });
+    expect(res.body.games[2]).toMatchObject({ exhibition: true, fantasy_points: null });
+    await request(app).get('/api/v1/athletes/usports_ath_999999').expect(404);
+  });
+
+  it('lists member universities for a sport', async () => {
+    const res = await request(app).get('/api/v1/universities?sport=usports_mbk').expect(200);
+    expect(res.body.data).toEqual([
+      { university_id: 'alpha', name: 'Alpha U', conference: 'OUA' },
+      { university_id: 'beta', name: 'Beta U', conference: 'CW' },
+    ]);
+  });
+
+  it('filters athletes by conference', async () => {
+    const res = await request(app).get('/api/v1/athletes?sport=usports_mbk&conference=cw&sort=name').expect(200);
+    expect(res.body.data.map((a: { last_name: string }) => a.last_name)).toEqual(['Centre', 'Forward', 'Noposition']);
+  });
+
+  it('lists games in a date window', async () => {
+    const res = await request(app).get('/api/v1/games?sport=usports_mbk&from=2026-10-30&to=2026-11-05').expect(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.data[0]).toMatchObject({
+      date: '2026-11-01', status: 'FINAL', home: { name: 'Alpha U', score: 80 }, away: { name: 'Beta U', score: 70 },
+    });
+  });
+
+  it('describes stat columns per sport', async () => {
+    const res = await request(app).get('/api/v1/sports').expect(200);
+    const mbk = res.body.data.find((s: { sport_id: string }) => s.sport_id === 'usports_mbk');
+    expect(mbk.stat_columns.season[0]).toEqual({ key: 'ppg', label: 'PPG' });
+    expect(mbk.stat_columns.game.map((c: { key: string }) => c.key)).toContain('points');
+  });
+});
+
 describe('auth and terms', () => {
   it('requires authentication for user endpoints', async () => {
     await request(app).get('/api/v1/me').expect(401);
@@ -339,6 +378,24 @@ describe('leagues', () => {
         .send({ athlete_id: await athleteId('Guard'), target_slot: 'G' }).expect(404);
       expect(outsider.body.error.code).toBe('NOT_FOUND');
     });
+  });
+
+  it('lists league teams by roster points and available athletes', async () => {
+    const teams = await request(app).get(`/api/v1/leagues/${hoops}/teams`).set(as('rival')).expect(200);
+    expect(teams.body.data.map((t: { team_name: string }) => t.team_name)).toEqual(['Commish Five', 'Rivals']);
+    expect(teams.body.data[0]).toMatchObject({ filled: 5, roster_size: 11, roster_points: 64, is_mine: false });
+    expect(teams.body.data[1]).toMatchObject({ is_mine: true, roster_points: 0 });
+
+    const league = await request(app).get(`/api/v1/leagues/${hoops}`).set(as('rival')).expect(200);
+    expect(league.body.position_eligibility.G).toEqual(['G', 'PG', 'SG']);
+
+    // Every MBK fixture athlete is rostered by the commissioner.
+    const avail = await request(app).get(`/api/v1/leagues/${hoops}/available`).set(as('rival')).expect(200);
+    expect(avail.body.pagination.total).toBe(0);
+    await request(app).delete(`/api/v1/leagues/${hoops}/roster/${await athleteId('Forward')}`).set(as('commish')).expect(200);
+    const after = await request(app).get(`/api/v1/leagues/${hoops}/available`).set(as('rival')).expect(200);
+    expect(after.body.data.map((a: { last_name: string }) => a.last_name)).toEqual(['Forward']);
+    await request(app).get(`/api/v1/leagues/${hoops}/available`).set(as('third')).expect(404);
   });
 
   it('rejects malformed ids and unknown routes', async () => {

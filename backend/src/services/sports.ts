@@ -1,6 +1,6 @@
 import type { Queryable } from '../db.js';
 import { HttpError } from '../errors.js';
-import { expandPositions, orderedLimits } from '../sport-display.js';
+import { expandPositions, orderedLimits, statColumns } from '../sport-display.js';
 
 /** Flat {"points":1} or grouped {"passing":{"yards":0.04}} (scored as passing_yards). */
 export type ScoringRules = Record<string, number | Record<string, number>>;
@@ -48,6 +48,7 @@ function formatSport(r: SportRow) {
     roster_positions: cfg ? expandPositions(cfg.roster_limits, cfg.slot_order) : null,
     roster_limits: cfg ? orderedLimits(cfg.roster_limits, cfg.slot_order) : null,
     scoring_rules: r.scoring_rules_json,
+    stat_columns: statColumns(r.code),
   };
 }
 

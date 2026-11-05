@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* VarsityHQ design tokens: dark-mode-first, electric teal accent. */
+@theme {
+  --color-accent: #06b6d4;
+  --color-accent-strong: #22d3ee;
+  --color-accent-muted: #0e7490;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  :root { color-scheme: dark; }
+  html, body { @apply bg-slate-900 text-slate-100 antialiased; }
+  body {
+    background-image:
+      radial-gradient(60rem 30rem at 10% -10%, rgb(6 182 212 / 0.14), transparent 60%),
+      radial-gradient(50rem 30rem at 110% 10%, rgb(99 102 241 / 0.10), transparent 60%);
+    background-attachment: fixed;
+  }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
+}
+
+/* Custom utilities (Tailwind v4: @utility, so they can be composed with @apply). */
+@utility glass { @apply rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 backdrop-blur-md; }
+@utility glass-strong { @apply rounded-2xl border border-white/10 bg-slate-800/70 shadow-xl shadow-black/40 backdrop-blur-md; }
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50; }
+@utility btn-primary { @apply btn bg-accent text-slate-950 hover:bg-accent-strong; }
+@utility btn-ghost { @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10; }
+@utility input { @apply w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none; }
+@utility label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400; }
+@utility chip { @apply inline-flex items-center rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-slate-200; }
+@utility section-title { @apply flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-400; }

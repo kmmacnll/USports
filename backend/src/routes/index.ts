@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { requireUser } from '../auth.js';
 import type { Db } from '../db.js';
 import { decodeId } from '../ids.js';
-import { searchAthletes } from '../services/athletes.js';
+import { getAthlete, searchAthletes } from '../services/athletes.js';
+import { listGames, listUniversities } from '../services/reference.js';
 import {
-  addToRoster, createLeague, dropFromRoster, getLeague, getRoster, joinLeague, swap,
+  addToRoster, availableAthletes, createLeague, dropFromRoster, getLeague, getRoster, joinLeague, listTeams, swap,
 } from '../services/leagues.js';
 import { acceptTerms, getMe } from '../services/me.js';
 import { listSports } from '../services/sports.js';
@@ -23,11 +24,24 @@ const AthleteQuery = z.object({
   university: z.string().trim().min(1).max(64).optional(),
   q: z.string().trim().min(1).max(64).optional(),
   position: z.string().trim().min(1).max(10).optional(),
+  conference: z.enum(['AUS', 'RSEQ', 'OUA', 'CW', 'aus', 'rseq', 'oua', 'cw']).optional(),
   season: z.string().regex(/^\d{4}(-\d{2})?$/).optional(),
   sort: z.enum(['fantasy_points', 'name']).default('fantasy_points'),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   page_size: z.coerce.number().int().min(1).max(100).default(25),
 });
+
+const AvailableQuery = AthleteQuery.omit({ sport: true, season: true });
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
+const GamesQuery = z.object({
+  sport: sportCode,
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+
+const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
 const CreateLeagueBody = z.object({
   league_name: z.string().trim().min(1).max(80),
@@ -74,9 +88,25 @@ export function publicRouter(db: Db): Router {
   r.get('/athletes', async (req, res) => {
     const q = AthleteQuery.parse(req.query);
     res.json(await searchAthletes(db, {
-      sport: q.sport, university: q.university, q: q.q, position: q.position, season: q.season,
-      sort: q.sort, page: q.page, pageSize: q.page_size,
+      sport: q.sport, university: q.university, q: q.q, position: q.position, conference: q.conference,
+      season: q.season, sort: q.sort, page: q.page, pageSize: q.page_size,
     }));
+  });
+
+  r.get('/athletes/:id', async (req, res) => {
+    res.json(await getAthlete(db, decodeId('athlete', req.params.id)));
+  });
+
+  r.get('/universities', async (req, res) => {
+    const sport = req.query.sport === undefined ? undefined : sportCode.parse(req.query.sport);
+    res.json({ data: await listUniversities(db, sport) });
+  });
+
+  r.get('/games', async (req, res) => {
+    const q = GamesQuery.parse(req.query);
+    const from = q.from ?? day(-3);
+    const to = q.to ?? day(4);
+    res.json({ from, to, data: await listGames(db, q.sport, from, to, q.limit) });
   });
 
   return r;
@@ -109,6 +139,18 @@ export function apiRouter(db: Db): Router {
     const body = JoinBody.parse(req.body);
     res.status(201).json(await joinLeague(db, requireUser(req).id, decodeId('league', req.params.id),
       body.team_name, body.invite_code));
+  });
+
+  r.get('/leagues/:id/teams', async (req, res) => {
+    res.json({ data: await listTeams(db, requireUser(req).id, decodeId('league', req.params.id)) });
+  });
+
+  r.get('/leagues/:id/available', async (req, res) => {
+    const q = AvailableQuery.parse(req.query);
+    res.json(await availableAthletes(db, requireUser(req).id, decodeId('league', req.params.id), {
+      university: q.university, q: q.q, position: q.position, conference: q.conference,
+      sort: q.sort, page: q.page, pageSize: q.page_size,
+    }));
   });
 
   // ---- rosters

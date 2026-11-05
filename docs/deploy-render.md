@@ -4,10 +4,11 @@ What gets deployed (all defined in [`render.yaml`](../render.yaml)):
 
 | Render resource | Type | What it does |
 |---|---|---|
-| `usports-db` | PostgreSQL 16 | The database |
-| `usports-api` | Web service (Node 22) | The REST API. Each deploy runs migrations and seeds before going live |
-| `usports-ingest-stats` | Cron job (Python 3.12), every 2 h | Schedules and box scores for all sports via usportspy |
-| `usports-ingest-rosters` | Cron job (Python 3.12), weekly | usports.ca roster pages: positions, heights, full rosters |
+| `varsityhq-db` | PostgreSQL 16 | The database |
+| `varsityhq-api` | Web service (Node 22) | The REST API. Each deploy runs migrations and seeds before going live |
+| `varsityhq-web` | Web service (Node 22) | The Next.js web app. It calls the API server-side over Render's private network |
+| `varsityhq-ingest` | Cron job (Python 3.12), daily 2 AM Eastern | Schedules and box scores for all sports via usportspy |
+| `varsityhq-rosters` | Cron job (Python 3.12), weekly | usports.ca roster pages: positions, heights, full rosters |
 
 > **Check before you start:** `render.yaml` was written from Render's
 > Blueprint spec as I last knew it (2025). I couldn't reach render.com to
@@ -30,7 +31,7 @@ To deploy a different branch instead, change every `branch:` line in
 2. Click **New → Blueprint**.
 3. Connect GitHub if prompted, and give Render access to the `kmmacnll/USports` repository.
 4. Select the repository. Render finds `render.yaml` at the root and lists
-   the 4 resources above.
+   the 5 resources above.
 5. Name the Blueprint (e.g. `usports-fantasy`).
 6. Render asks for the env vars marked `sync: false` (`JWT_JWKS_URL`,
    `JWT_ISSUER`, `JWT_AUDIENCE`). **Leave all three blank for now.** The API
@@ -44,19 +45,21 @@ Render then:
   and loads the sports, terms and rulesets. If this step fails, the old
   version keeps running and nothing goes live;
 - starts the API and waits for `GET /healthz` to return 200;
+- builds the web app (`npm run build` in `web/`) and points it at the API
+  through `API_HOSTPORT`;
 - builds both cron jobs. They don't run until their schedule, or until you
   trigger them in step 4.
 
 ## 3. Check the API
 
-The API's URL is on its dashboard page (e.g. `https://usports-api.onrender.com`).
+The API's URL is on its dashboard page (e.g. `https://varsityhq-api.onrender.com`).
 
 ```bash
-curl https://usports-api.onrender.com/healthz
+curl https://varsityhq-api.onrender.com/healthz
 ```
 
 ```bash
-curl https://usports-api.onrender.com/api/v1/sports
+curl https://varsityhq-api.onrender.com/api/v1/sports
 ```
 
 You should see `usports_fb`, `usports_mbk` and `usports_wbk`, each with its
@@ -64,23 +67,23 @@ You should see `usports_fb`, `usports_mbk` and `usports_wbk`, each with its
 
 ## 4. Load the data (first run)
 
-1. Open **usports-ingest-stats → Trigger Run**.
+1. Open **varsityhq-ingest → Trigger Run**.
 2. Watch **Logs**. The run takes about a minute and ends with a JSON summary
    for each sport (games, athletes, stat lines).
 3. Check the result:
 
    ```bash
-   curl "https://usports-api.onrender.com/api/v1/athletes?sport=usports_mbk&page_size=5"
+   curl "https://varsityhq-api.onrender.com/api/v1/athletes?sport=usports_mbk&page_size=5"
    ```
 
-From then on the job runs every 2 hours. Runs with nothing new write nothing.
+From then on the job runs daily at 07:00 UTC, which is 2 AM Eastern in winter (EST) and 3 AM in summer (EDT). Runs with nothing new write nothing.
 
 ## 5. First roster scrape: dry run first
 
 The roster scraper is the one part that has never run against live
 usports.ca pages. Run it once in dry-run mode, which writes nothing:
 
-1. Open **usports-ingest-rosters → Settings → Command**, and add ` --dry-run -v` to the end.
+1. Open **varsityhq-rosters → Settings → Command**, and add ` --dry-run -v` to the end.
 2. Save, then click **Trigger Run**.
 3. Read the logs:
    - `Carleton: 15 roster entries (0 new)`-style lines mean it works.
@@ -90,7 +93,18 @@ usports.ca pages. Run it once in dry-run mode, which writes nothing:
      is a small fix once I can see the real markup.
 4. If it looks right, remove ` --dry-run -v`, save, and **Trigger Run** for real.
 
-Once it has run, athletes have positions (G/F/C, QB/RB/WR/...) and can fill
+## 5b. Open the web app
+
+Open **varsityhq-web**'s URL (e.g. `https://varsityhq-web.onrender.com`). The
+dashboard and player directory work without signing in. To manage a league,
+click **Sign in** and paste a token from step 6.
+
+If pages show "Could not reach the API", check that `API_HOSTPORT` on
+varsityhq-web has a value (Environment tab) and that varsityhq-api is live.
+As a fallback, set `API_BASE_URL` to the API's public URL plus `/api/v1`
+and remove `API_HOSTPORT`.
+
+Once the roster job has run, athletes have positions (G/F/C, QB/RB/WR/...) and can fill
 starting slots. Until then they can only go on the bench.
 
 > Football rosters need team page links. The football feed doesn't include
@@ -102,18 +116,21 @@ starting slots. Until then they can only go on the bench.
 User endpoints need a bearer token. Until the app has real sign-in, mint one
 from the generated secret:
 
-1. Open **usports-api → Shell** (Shell needs a paid instance).
+1. Open **varsityhq-api → Shell** (Shell needs a paid instance).
 2. Run:
 
    ```bash
    cd backend && npm run token -- kieran "Kieran" 30d
    ```
 
+   To use the web app, paste the token at `/login`. The steps below use it
+   with `curl` instead.
+
 3. Use the printed token:
 
    ```bash
    TOKEN=paste-token-here
-   API=https://usports-api.onrender.com/api/v1
+   API=https://varsityhq-api.onrender.com/api/v1
    ```
 
    ```bash
@@ -131,7 +148,7 @@ rotate it (**Environment → JWT_SECRET → Generate**) once real sign-in is liv
 
 ## 7. Switch to real sign-in (when the iOS app exists)
 
-For **Sign in with Apple**, set these on **usports-api → Environment**:
+For **Sign in with Apple**, set these on **varsityhq-api → Environment**:
 
 | Key | Value |
 |---|---|
@@ -147,8 +164,9 @@ the same way with their own JWKS URL, issuer and audience.
 ## 8. Day-to-day
 
 - **Deploys:** pushing to `main` redeploys only what changed (`buildFilter`):
-  API changes deploy the API, and pipeline changes rebuild the crons.
-- **Rollback:** **usports-api → Events / Deploys → Rollback**. This rolls back
+  `backend/` or `db/` changes deploy the API, `web/` changes deploy the web
+  app, and `pipeline/` changes rebuild the crons.
+- **Rollback:** **varsityhq-api → Events / Deploys → Rollback**. This rolls back
   code, not the database. Migrations only move forward, so write them to be
   backwards compatible: add columns before the code that uses them, and
   remove them after.
@@ -161,7 +179,7 @@ the same way with their own JWKS URL, issuer and audience.
 - **New season:** nothing to do. On July 1 the season label rolls over, and
   the next deploy and pipeline run create next season's rulesets and games.
   Deploy something (or **Manual Deploy**) after July 1 so the seeds run.
-- **Database access from your laptop:** add your IP under **usports-db →
+- **Database access from your laptop:** add your IP under **varsityhq-db →
   Networking / Access Control** (`ipAllowList` is empty by default, so nothing
   outside Render can connect). Then use the **External Database URL**, which
   requires SSL.
@@ -169,12 +187,12 @@ the same way with their own JWKS URL, issuer and audience.
 
 ## Costs and plans
 
-All four resources are on paid plans, because:
+All five resources are on paid plans, because:
 - cron jobs have no free tier;
 - the pre-deploy migration step needs a paid web instance;
 - free databases expire.
 
-Expect roughly the price of a starter web service, plus a small Postgres,
+Expect roughly the price of two starter web services, plus a small Postgres,
 plus a few cents of cron runtime per month. Check current pricing at
 <https://render.com/pricing>; I couldn't verify it from here.
 
@@ -184,7 +202,7 @@ plus a few cents of cron runtime per month. Check current pricing at
 |---|---|
 | Build: `tsc: not found` | The build must use `npm ci --include=dev`, because `NODE_ENV=production` skips dev dependencies |
 | Pre-deploy fails | Open the deploy's logs. The SQL error is printed, and the previous version keeps serving |
-| API won't start: `Configure JWT_SECRET or JWT_JWKS_URL` | Set one of them on usports-api → Environment |
+| API won't start: `Configure JWT_SECRET or JWT_JWKS_URL` | Set one of them on varsityhq-api → Environment |
 | Cron: `Failed to retrieve release data: 403` | The run is missing `--no-season-check`. usportspy's season lookup hits the GitHub API, which is rate-limited per IP, and Render IPs are shared |
 | Roster job: many `roster fetch failed … 429` | usports.ca is rate-limiting. The scraper already waits 1 s between requests; raise `REQUEST_INTERVAL_S` in `pipeline/usports_pipeline/rosters.py` |
-| `/athletes` is empty | Run step 4 (Trigger Run on usports-ingest-stats) |
+| `/athletes` is empty | Run step 4 (Trigger Run on varsityhq-ingest) |

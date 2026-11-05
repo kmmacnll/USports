@@ -1,52 +1,50 @@
-# Render Blueprint: Postgres + API + ingestion cron jobs.
-# Guide: docs/deploy-render.md
+# VarsityHQ on Render: Postgres + API + web app + ingestion cron jobs.
+# Step-by-step guide: docs/deploy-render.md
 #
-# Field names and plan names were written from Render's Blueprint spec as of
-# 2025 and have NOT been validated against Render's current docs. Render
-# validates this file when you create the Blueprint; fix anything it flags
-# there (most likely plan names).
+# Field and plan names follow Render's Blueprint spec as of 2025. They could
+# not be checked against Render's current docs from the environment this was
+# written in. Render validates this file when you create the Blueprint; if it
+# rejects a value (most likely a plan name), change it there.
 
 databases:
-  - name: usports-db
-    databaseName: usports_fantasy
-    user: usports
-    plan: basic-256mb          # paid; the free plan expires after a fixed period
+  - name: varsityhq-db
+    databaseName: varsityhq
+    user: varsityhq
+    plan: basic-256mb          # paid: the free plan expires
     region: ohio               # closest Render region to Ontario/Quebec
     postgresMajorVersion: "16"
-    ipAllowList: []            # no access from outside Render; add your IP to run tools locally
+    ipAllowList: []            # private network only; add your IP to connect from a laptop
 
 services:
-  # ---------------------------------------------------------------- REST API
+  # ------------------------------------------------------------ REST API
   - type: web
-    name: usports-api
+    name: varsityhq-api
     runtime: node
     region: ohio
     plan: starter              # pre-deploy commands need a paid instance
     branch: main
+    autoDeploy: true           # deploy on every push to main
     buildCommand: cd backend && npm ci --include=dev && npm run build
-    preDeployCommand: cd backend && npm run migrate
+    preDeployCommand: cd backend && npm run migrate     # migrations + seeds; a failure keeps the old version live
     startCommand: cd backend && npm start
     healthCheckPath: /healthz
-    autoDeploy: true
     buildFilter:
-      paths:
-        - backend/**
-        - db/**
+      paths: [backend/**, db/**]
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: "22.20.0"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: usports-db
-          property: connectionString
       - key: LOG_LEVEL
         value: info
-      # Until the iOS app's sign-in provider is chosen, tokens are HS256-signed
-      # with this generated secret. Switch to JWT_JWKS_URL later (see guide).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: varsityhq-db
+          property: connectionString
+      # HS256 signing secret for test tokens until real sign-in exists.
       - key: JWT_SECRET
         generateValue: true
+      # Real sign-in (e.g. Sign in with Apple); see the guide, step 8.
       - key: JWT_JWKS_URL
         sync: false
       - key: JWT_ISSUER
@@ -54,44 +52,71 @@ services:
       - key: JWT_AUDIENCE
         sync: false
 
-  # ---------------------------------------------------- stats ingestion (2h)
+  # ------------------------------------------------------------ Web app
+  - type: web
+    name: varsityhq-web
+    runtime: node
+    region: ohio
+    plan: starter
+    branch: main
+    autoDeploy: true
+    buildCommand: cd web && npm ci --include=dev && npm run build
+    startCommand: cd web && npm start        # next start listens on $PORT
+    healthCheckPath: /api/health
+    buildFilter:
+      paths: [web/**]
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22.20.0"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # host:port of the API on Render's private network. The web app calls
+      # the API server-side only, so the API never needs CORS.
+      - key: API_HOSTPORT
+        fromService:
+          type: web
+          name: varsityhq-api
+          property: hostport
+
+  # ------------------------------------- stats ingestion, daily at 2 AM
   - type: cron
-    name: usports-ingest-stats
+    name: varsityhq-ingest
     runtime: python
     region: ohio
     plan: starter
     branch: main
-    schedule: "15 */2 * * *"   # UTC: every 2 hours at :15
+    schedule: "0 7 * * *"      # Render cron is UTC: 07:00 UTC = 2 AM EST (3 AM during EDT)
     buildCommand: pip install -r pipeline/requirements.txt
     startCommand: cd pipeline && python ingest_usports.py --sport all --no-season-check
     buildFilter:
-      paths:
-        - pipeline/**
+      paths: [pipeline/**]
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
       - key: DATABASE_URL
         fromDatabase:
-          name: usports-db
+          name: varsityhq-db
           property: connectionString
 
-  # ------------------------------------------------- roster scrape (weekly)
+  # -------------------------------------- roster scrape, weekly (Mon)
+  # Separate job so a roster-page problem can never roll back a stats run.
   - type: cron
-    name: usports-ingest-rosters
+    name: varsityhq-rosters
     runtime: python
     region: ohio
     plan: starter
     branch: main
-    schedule: "30 9 * * 1"     # UTC: Mondays 09:30 (05:30 Eastern)
+    schedule: "30 7 * * 1"     # Mondays 07:30 UTC = 2:30 AM EST
     buildCommand: pip install -r pipeline/requirements.txt
     startCommand: cd pipeline && python ingest_usports.py --sport all --rosters --skip-stats --no-season-check
     buildFilter:
-      paths:
-        - pipeline/**
+      paths: [pipeline/**]
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
       - key: DATABASE_URL
         fromDatabase:
-          name: usports-db
+          name: varsityhq-db
           property: connectionString

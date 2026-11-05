@@ -6,6 +6,7 @@ import { encodeId } from '../ids.js';
 import { isEligible, isStarterSlot, orderSlots, orderedLimits } from '../sport-display.js';
 import type { RosterConfig, ScoringRules } from './sports.js';
 import { getSport } from './sports.js';
+import { searchAthletes, type AthleteSearch } from './athletes.js';
 
 // ----------------------------------------------------------------- leagues
 
@@ -71,6 +72,7 @@ function formatLeague(l: LeagueRow, userId: string) {
     ruleset_name: l.ruleset_name,
     roster_size: l.roster_size,
     roster_limits: orderedLimits(l.roster_limits_json, cfg.slot_order),
+    position_eligibility: cfg.position_eligibility ?? {},
     scoring_rules: l.scoring_rules_json,
     status: l.status,
     is_private: l.is_private,
@@ -360,4 +362,43 @@ export async function dropFromRoster(db: Db, userId: string, leagueId: string, a
     if (!rowCount) throw new HttpError(404, 'NOT_ON_ROSTER', 'That athlete is not on your roster');
     return formatRoster(league, team, await loadSpots(client, league, team.id));
   });
+}
+
+/** Teams in a league, ranked by the season points of their current rosters. */
+export async function listTeams(db: Db, userId: string, leagueId: string) {
+  const league = await loadLeague(db, leagueId, userId);
+  assertCanView(league, userId);
+  const { rows } = await db.query<{
+    id: string; team_name: string; user_id: string; display_name: string; filled: number; roster_points: string;
+  }>(
+    `SELECT t.id, t.team_name, t.user_id, u.display_name,
+            (SELECT count(*)::int FROM roster_spots rs WHERE rs.fantasy_team_id = t.id) AS filled,
+            coalesce((SELECT sum(p.points)
+                        FROM roster_spots rs
+                        JOIN game_stats gs ON gs.athlete_id = rs.athlete_id
+                        JOIN game_stat_fantasy_points p ON p.game_stat_id = gs.id AND p.competition_id = $2
+                       WHERE rs.fantasy_team_id = t.id), 0) AS roster_points
+       FROM fantasy_teams t JOIN users u ON u.id = t.user_id
+      WHERE t.league_id = $1
+      ORDER BY roster_points DESC, t.created_at`,
+    [league.id, league.competition_id],
+  );
+  return rows.map((t) => ({
+    team_id: encodeId('team', t.id),
+    team_name: t.team_name,
+    owner_id: encodeId('user', t.user_id),
+    owner_name: t.display_name,
+    is_mine: t.user_id === userId,
+    filled: t.filled,
+    roster_size: league.roster_size,
+    roster_points: Number(t.roster_points),
+  }));
+}
+
+/** Athletes in the league's sport not yet rostered by any team in it. */
+export async function availableAthletes(db: Db, userId: string, leagueId: string,
+  q: Omit<AthleteSearch, 'sport' | 'availableInLeague'>) {
+  const league = await loadLeague(db, leagueId, userId);
+  if (!isMember(league, userId)) throw notFound('League');
+  return searchAthletes(db, { ...q, sport: league.sport_code, availableInLeague: league.id });
 }

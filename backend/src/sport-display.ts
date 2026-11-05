@@ -27,6 +27,49 @@ const FOOTBALL = {
   sacks_pg: 'defence_sacks',
 } as const;
 
+export interface StatColumn {
+  key: string;
+  label: string;
+}
+
+/** Season columns (keys of athlete.stats) and per-game columns (keys of raw stats) shown in UIs. */
+export const STAT_COLUMNS: Record<string, { season: StatColumn[]; game: StatColumn[] }> = {
+  basketball: {
+    season: [
+      { key: 'ppg', label: 'PPG' }, { key: 'rpg', label: 'RPG' }, { key: 'apg', label: 'APG' },
+      { key: 'spg', label: 'SPG' }, { key: 'bpg', label: 'BPG' }, { key: 'mpg', label: 'MIN' },
+    ],
+    game: [
+      { key: 'minutes', label: 'MIN' }, { key: 'points', label: 'PTS' }, { key: 'rebounds', label: 'REB' },
+      { key: 'assists', label: 'AST' }, { key: 'steals', label: 'STL' }, { key: 'blocks', label: 'BLK' },
+      { key: 'turnovers', label: 'TO' },
+    ],
+  },
+  football: {
+    season: [
+      { key: 'pass_ypg', label: 'PASS YPG' }, { key: 'rush_ypg', label: 'RUSH YPG' },
+      { key: 'rec_ypg', label: 'REC YPG' }, { key: 'rec_pg', label: 'REC/G' }, { key: 'tackles_pg', label: 'TKL/G' },
+    ],
+    game: [
+      { key: 'passing_yards', label: 'PASS' }, { key: 'passing_touchdown', label: 'P TD' },
+      { key: 'rushing_yards', label: 'RUSH' }, { key: 'rushing_touchdown', label: 'R TD' },
+      { key: 'receiving_receptions', label: 'REC' }, { key: 'receiving_yards', label: 'REC YD' },
+      { key: 'kicking_fg_made', label: 'FGM' }, { key: 'defence_tackles', label: 'TKL' },
+    ],
+  },
+};
+
+const COLUMN_SET: Record<string, keyof typeof STAT_COLUMNS> = {
+  usports_mbk: 'basketball',
+  usports_wbk: 'basketball',
+  usports_fb: 'football',
+};
+
+export function statColumns(sportCode: string): { season: StatColumn[]; game: StatColumn[] } {
+  const set = COLUMN_SET[sportCode];
+  return set ? STAT_COLUMNS[set]! : { season: [], game: [] };
+}
+
 export const STAT_SUMMARY: Record<string, Record<string, string>> = {
   usports_mbk: BASKETBALL,
   usports_wbk: BASKETBALL,
