@@ -5,13 +5,15 @@
 --   scoring {points 1.0, rebounds 1.2, assists 1.5, steals 3.0, blocks 3.0, turnovers -1.0}
 -- usports_wbk mirrors it until a women's-specific ruleset is defined.
 --
+-- slot_order keeps the display order (jsonb objects don't preserve key order).
 -- position_eligibility maps each starter slot to the normalised position
 -- tokens (athletes.positions) that may fill it. U Sports rosters mostly list
 -- generic G / F / C, so G fills PG or SG and F fills SF or PF.
 
 INSERT INTO competitions (name, sport_id, season, roster_config_json, scoring_rules_json, is_default)
 SELECT 'Standard', s.id, '2026-27',
-       '{"roster_limits": {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
+       '{"slot_order":    ["PG","SG","SF","PF","C","BENCH"],
+         "roster_limits": {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
          "position_eligibility": {"PG":["PG","G"], "SG":["SG","G"],
                                   "SF":["SF","F"], "PF":["PF","F"], "C":["C"]}}'::jsonb,
        '{"points":1.0,"rebounds":1.2,"assists":1.5,"steals":3.0,"blocks":3.0,"turnovers":-1.0}'::jsonb,

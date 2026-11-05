@@ -289,7 +289,8 @@ CREATE INDEX user_athlete_declarations_athlete_idx ON user_athlete_declarations 
 -- One sport + season + ruleset. Leagues are created under a competition.
 --
 -- roster_config_json:
---   {"roster_limits":        {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
+--   {"slot_order":           ["PG","SG","SF","PF","C","BENCH"],   -- display order
+--    "roster_limits":        {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
 --    "position_eligibility": {"PG":["PG","G"], "SG":["SG","G"], ...}}
 --   BENCH (and IR, if present) accept any athlete of the sport. Any other
 --   slot accepts athletes whose positions[] overlap its eligibility list
@@ -475,7 +476,7 @@ BEGIN
      AND NOT coalesce(v_config -> 'position_eligibility', '{}'::jsonb) ? k;
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION 'roster slot(s) % are not defined for competition %', v_bad, NEW.competition_id
-      USING ERRCODE = 'check_violation';
+      USING ERRCODE = 'check_violation', HINT = 'INVALID_SLOT';
   END IF;
 
   IF TG_OP = 'INSERT' OR NEW.commissioner_id <> OLD.commissioner_id OR NEW.competition_id <> OLD.competition_id THEN
@@ -588,8 +589,10 @@ BEGIN
 
   IF NEW.position_assigned NOT IN ('BENCH', 'IR') THEN
     v_allowed := coalesce(
-      ARRAY(SELECT jsonb_array_elements_text(v_eligibility -> NEW.position_assigned)),
-      '{}') || NEW.position_assigned;
+      ARRAY(SELECT jsonb_array_elements_text(v_eligibility -> NEW.position_assigned)), '{}');
+    IF NOT NEW.position_assigned = ANY (v_allowed) THEN
+      v_allowed := v_allowed || NEW.position_assigned;
+    END IF;
     IF NOT (v_positions && v_allowed) THEN
       RAISE EXCEPTION 'athlete % (positions %) is not eligible for slot % (needs one of %)',
         NEW.athlete_id, v_positions, NEW.position_assigned, v_allowed

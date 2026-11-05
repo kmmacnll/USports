@@ -71,11 +71,13 @@ keys match `game_stats.raw_stats_json`. Scoring is computed in the database by
 
 **`competitions.roster_config_json`**
 ```json
-{"roster_limits":        {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
+{"slot_order":           ["PG","SG","SF","PF","C","BENCH"],
+ "roster_limits":        {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
  "position_eligibility": {"PG":["PG","G"],"SG":["SG","G"],"SF":["SF","F"],"PF":["PF","F"],"C":["C"]}}
 ```
 `roster_positions: ["PG","SG","SF","PF","C","BENCH"]` is stored as one slot
-per entry. A starter slot accepts athletes whose `athletes.positions` overlap
+per entry. `slot_order` keeps that display order, because jsonb objects don't
+preserve key order. A starter slot accepts athletes whose `athletes.positions` overlap
 its eligibility list. U Sports rosters mostly publish a generic G, F or C, so
 G fills PG or SG and F fills SF or PF. `BENCH` (and `IR`) accept any athlete in
 the sport.
