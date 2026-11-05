@@ -10,7 +10,7 @@ cp .env.example .env          # AUTH_DEV_HEADER=true for local use
 npm run dev                   # http://localhost:3000
 npm test                      # builds a throwaway `usports_api_test` DB from db/ migrations + fixtures
 npm run build && npm start    # compiled
-npm run migrate:dev           # apply db/ migrations + seeds without psql (deploys run `npm run migrate`)
+npm run migrate:dev           # apply db/ migrations + seeds without psql (Render runs `npm run migrate` at start)
 JWT_SECRET=... npm run token -- <subject> [name] [ttl]   # mint a test bearer token (after build)
 ```
 
@@ -102,7 +102,7 @@ identity provider the app adopts, and `sub` becomes `users.auth_subject`. A
 ```
 src/
   index.ts          server bootstrap + graceful shutdown
-  migrate.ts        migration + seed runner (Render pre-deploy)
+  migrate.ts        migration + seed runner (runs before the server on Render)
   mint-token.ts     test-token CLI
   app.ts            express app (createApp is used by tests too)
   config.ts         env validation

@@ -5,7 +5,7 @@ What gets deployed (all defined in [`render.yaml`](../render.yaml)):
 | Render resource | Type | What it does |
 |---|---|---|
 | `varsityhq-db` | PostgreSQL 16 | The database |
-| `varsityhq-api` | Web service (Node 22) | The REST API. Each deploy runs migrations and seeds before going live |
+| `varsityhq-api` | Web service (Node 22) | The REST API. Each deploy runs migrations and seeds as it starts, and only goes live once they succeed |
 | `varsityhq-web` | Web service (Node 22) | The Next.js web app. It calls the API server-side over Render's private network |
 | `varsityhq-ingest` | Cron job (Python 3.12), daily 2 AM Eastern | Schedules and box scores for all sports via usportspy |
 | `varsityhq-rosters` | Cron job (Python 3.12), weekly | usports.ca roster pages: positions, heights, full rosters |
@@ -34,17 +34,20 @@ To deploy a different branch instead, change every `branch:` line in
    the 5 resources above.
 5. Name the Blueprint (e.g. `usports-fantasy`).
 6. Render asks for the env vars marked `sync: false` (`JWT_JWKS_URL`,
-   `JWT_ISSUER`, `JWT_AUDIENCE`). **Leave all three blank for now.** The API
-   uses the generated `JWT_SECRET` until the iOS app has real sign-in (step 7).
+   `JWT_ISSUER`, `JWT_AUDIENCE`, `MIGRATE_DATABASE_URL`). **Leave them all
+   blank for now.** The API uses the generated `JWT_SECRET` until the iOS app
+   has real sign-in (step 8).
 7. Click **Apply**.
 
 Render then:
 - creates the database;
 - builds the API (`npm ci --include=dev && npm run build`);
-- runs the **pre-deploy** step (`npm run migrate`), which creates the schema
-  and loads the sports, terms and rulesets. If this step fails, the old
-  version keeps running and nothing goes live;
-- starts the API and waits for `GET /healthz` to return 200;
+- starts the API with `npm run migrate && npm start`. The migration step
+  creates the schema and loads the sports, terms and rulesets. On a brand-new
+  Blueprint it waits (up to 3 minutes) for the database to become reachable.
+  If it fails, the new instance never passes its health check and the old
+  version keeps running;
+- waits for `GET /healthz` to return 200;
 - builds the web app (`npm run build` in `web/`) and points it at the API
   through `API_HOSTPORT`;
 - builds both cron jobs. They don't run until their schedule, or until you
@@ -172,8 +175,8 @@ the same way with their own JWKS URL, issuer and audience.
   remove them after.
 - **Schema changes:** add a new numbered file, e.g.
   `db/migrations/0002_add_x.up.sql` with a matching `.down.sql`. Never edit
-  `0001` once it has been deployed. The pre-deploy step applies new files
-  automatically.
+  `0001` once it has been deployed. The API applies new files automatically
+  when it starts.
 - **Rulesets:** edit `db/seeds/0003_default_competitions.sql`. The next
   deploy updates the current season's rules. Past seasons keep theirs.
 - **New season:** nothing to do. On July 1 the season label rolls over, and
@@ -189,7 +192,7 @@ the same way with their own JWKS URL, issuer and audience.
 
 All five resources are on paid plans, because:
 - cron jobs have no free tier;
-- the pre-deploy migration step needs a paid web instance;
+- free web services sleep when idle, so the first request after a pause is slow;
 - free databases expire.
 
 Expect roughly the price of two starter web services, plus a small Postgres,
@@ -201,7 +204,9 @@ plus a few cents of cron runtime per month. Check current pricing at
 | Symptom | Fix |
 |---|---|
 | Build: `tsc: not found` | The build must use `npm ci --include=dev`, because `NODE_ENV=production` skips dev dependencies |
-| Pre-deploy fails | Open the deploy's logs. The SQL error is printed, and the previous version keeps serving |
+| API deploy log: `Error: getaddrinfo ENOTFOUND dpg-…-a` | The database's internal hostname doesn't resolve. (1) Check that **varsityhq-db** and **varsityhq-api** are in the same region: internal hostnames only resolve within one region. A service can't change region, so delete it and re-sync the Blueprint to recreate it in `ohio`. (2) Or set `MIGRATE_DATABASE_URL` on varsityhq-api to the database's **External Database URL** plus `?sslmode=require`. That only fixes migrations, though; the running API also uses the internal URL, so a region mismatch still has to be fixed |
+| Web service fails right after the API fails | varsityhq-web gets `API_HOSTPORT` from varsityhq-api. Fix the API first, then **Manual Deploy** the web service |
+| Migration step fails | The deploy log shows the SQL error. The previous version keeps serving |
 | API won't start: `Configure JWT_SECRET or JWT_JWKS_URL` | Set one of them on varsityhq-api → Environment |
 | Cron: `Failed to retrieve release data: 403` | The run is missing `--no-season-check`. usportspy's season lookup hits the GitHub API, which is rate-limited per IP, and Render IPs are shared |
 | Roster job: many `roster fetch failed … 429` | usports.ca is rate-limiting. The scraper already waits 1 s between requests; raise `REQUEST_INTERVAL_S` in `pipeline/usports_pipeline/rosters.py` |
