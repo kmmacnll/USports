@@ -9,6 +9,11 @@ const Env = z.object({
   JWT_JWKS_URL: z.url().optional(),
   JWT_ISSUER: z.string().optional(),
   JWT_AUDIENCE: z.string().optional(),
+  // Run db/ migrations + seeds when the server starts (Render sets this).
+  MIGRATE_ON_START: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   AUTH_DEV_HEADER: z
     .enum(['true', 'false'])
     .default('false')
@@ -19,7 +24,10 @@ const Env = z.object({
 export type Config = z.infer<typeof Env>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = Env.safeParse(env);
+  // Hosts often set optional variables that were left blank to "" (Render does
+  // for sync:false keys). Treat blank as unset rather than as an invalid value.
+  const present = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== ''));
+  const parsed = Env.safeParse(present);
   if (!parsed.success) {
     throw new Error(`Invalid environment: ${z.prettifyError(parsed.error)}`);
   }
