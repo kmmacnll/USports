@@ -1,108 +1,118 @@
 # `db/` — PostgreSQL schema
 
-Plain SQL migrations, applied with `psql` by a tiny runner. Both the Python
-pipeline and the Node API read and write this schema; neither one owns it.
+Plain SQL migrations, applied with `psql` by a tiny runner. The Python
+pipeline and the Node API both read and write this schema. Neither one owns it.
 
 ```
 db/
 ├── migrate.sh                         # up | down | seed | status
-├── migrations/
-│   ├── 0001_init_schema.up.sql
-│   └── 0001_init_schema.down.sql
+├── migrations/0001_init_schema.{up,down}.sql
 ├── seeds/                             # idempotent reference data
 │   ├── 0001_sports.sql
-│   └── 0002_default_competitions.sql
-└── tests/
-    └── schema_smoke_test.sql          # checks the constraints, then rolls back
+│   ├── 0002_terms.sql
+│   └── 0003_default_competitions.sql
+└── tests/schema_smoke_test.sql        # checks every rule below with synthetic rows, then rolls back
 ```
-
-## Quick start
 
 ```bash
 docker compose up -d db
 export DATABASE_URL=postgres://usports:usports@localhost:5432/usports_fantasy
-./db/migrate.sh up
-./db/migrate.sh seed
+./db/migrate.sh up && ./db/migrate.sh seed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/schema_smoke_test.sql
 ```
 
 ## Model
 
 ```
-                 ┌──────────── REAL-WORLD (pipeline writes) ────────────┐
- universities ◄── athletes ──► sports ◄── games ──► universities (home/away)
-                     │                      │
-                     └──────► game_stats ◄──┘   raw_stats_json (JSONB, sport-specific keys)
-                                   │
-                 ┌─────────────────┼────── FANTASY (API writes) ─────────┐
-                 │                 ▼                                      │
- sports ◄── competitions ──► game_stat_fantasy_points                    │
-             │  roster_config_json / scoring_rules_json (JSONB)          │
-             ▼                                                            │
- users ◄── leagues ──► fantasy_teams ──► roster_spots ──► athletes       │
+ REAL-WORLD (pipeline writes)
+   universities ◄─ university_aliases
+        ▲  ▲
+        │  └── team_seasons (usports.ca team page per sport+season)
+        │
+   athletes ◄── athlete_source_ids (every usports.ca id / name key seen)
+        ▲
+   game_stats ──► games ──► sports
+        │ raw_stats_json {"points":20,"rebounds":5,...}
+        ▼
+ FANTASY (API writes)
+   game_stat_fantasy_points ◄── competitions (sport+season+ruleset) ──► sports
+                                     ▲
+   users ── user_athlete_declarations   leagues (roster_limits_json override)
+     ▲                                     ▲
+     └──────── fantasy_teams ──────────────┘
+                    ▲
+               roster_spots ──► athletes
 ```
 
-### Why it can host any sport
+## Public ID formats
 
-| Concern        | Where it lives                       | Sport-specific? |
-|----------------|--------------------------------------|-----------------|
-| Box-score line | `game_stats.raw_stats_json`          | keys only       |
-| Roster shape   | `competitions.roster_config_json`    | data            |
-| Scoring        | `competitions.scoring_rules_json`    | data            |
-| Everything else| relational columns                   | no              |
+The API serialises internal `BIGINT` ids with prefixes. It never exposes the
+usports.ca ids, which change every season.
 
-To add a sport: insert a `sports` row, have the pipeline write that sport's
-stat keys, and add a `competitions` row whose scoring keys match those keys.
-No migration needed.
+| Entity | Public id | Source |
+|---|---|---|
+| sport | `usports_mbk` | `sports.code` |
+| athlete | `usports_ath_10482` | `athletes.id` |
+| league | `lg_98765` | `leagues.id` |
+| user | `usr_1` | `users.id` |
 
-### Additions beyond the original spec, and why
+Sport codes: `usports_mbk`, `usports_wbk` (active); `usports_mhk`,
+`usports_whk`, `usports_fb`, `usports_mvb`, `usports_wvb`, `usports_msoc`,
+`usports_wsoc` (catalogued, not yet ingested).
 
-- **`games`**: gives box scores a stable upsert key (`sport_id, source_game_id`),
-  handles double-headers, and stores fixtures for weekly matchups.
-  `game_stats` still keeps `game_date` and `opponent_id` (copied from `games`) for fast filtering.
-- **`users`**: a real FK target for `commissioner_id` and `user_id`.
-  `auth_subject` holds the external auth provider's id. No credentials are stored.
-- **`game_stat_fantasy_points`**: leagues in different competitions can score
-  the same game differently. `game_stats.fantasy_points_calculated` is the
-  score under the sport's **default** competition (`is_default = TRUE`) and is
-  used for browsing and sorting.
-- **`athlete_season_stats` view**: season totals for every numeric stat key,
-  for any sport. It backs `GET /api/v1/athletes`.
+## JSON contracts
 
-### Invariants enforced in the database
+**`competitions.scoring_rules_json`**: a flat map of stat key to points. The
+keys match `game_stats.raw_stats_json`. Scoring is computed in the database by
+`fantasy_score(stats, rules)`.
+```json
+{"points":1.0,"rebounds":1.2,"assists":1.5,"steals":3.0,"blocks":3.0,"turnovers":-1.0}
+```
+
+**`competitions.roster_config_json`**
+```json
+{"roster_limits":        {"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1},
+ "position_eligibility": {"PG":["PG","G"],"SG":["SG","G"],"SF":["SF","F"],"PF":["PF","F"],"C":["C"]}}
+```
+`roster_positions: ["PG","SG","SF","PF","C","BENCH"]` is stored as one slot
+per entry. A starter slot accepts athletes whose `athletes.positions` overlap
+its eligibility list. U Sports rosters mostly publish a generic G, F or C, so
+G fills PG or SG and F fills SF or PF. `BENCH` (and `IR`) accept any athlete in
+the sport.
+
+**`leagues.roster_limits_json` / `roster_size`**: these default to the
+competition's limits and can be overridden per league. `roster_size` must
+equal the sum of the limits.
+```json
+{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4}   // roster_size 15
+```
+
+A roster row is (`position_assigned`, `slot_index`): for example `('PG',1)` or
+`('BENCH',1)`. `slot_type` (STARTER, BENCH or INJURED_RESERVE) is derived from
+`position_assigned`.
+
+## Rules enforced in the database
 
 | Rule | Mechanism |
-|------|-----------|
-| Re-ingesting never duplicates athletes, games, or stat lines | `UNIQUE (sport_id, usports_id)`, `UNIQUE (sport_id, source_game_id)`, `UNIQUE (athlete_id, game_id)` |
-| One team per user per league | `UNIQUE (league_id, user_id)` |
-| League can't exceed `max_teams` | `fantasy_teams_capacity` trigger (row-locks the league) |
-| Athlete rostered at most once per league | `roster_spots.league_id` (pinned by composite FK) + `UNIQUE (league_id, athlete_id)` |
-| Athlete's sport must match the league's sport | `roster_spots_sport_match` trigger |
-| One athlete per concrete slot, but swaps are atomic | `roster_spots_slot_key` is `DEFERRABLE`; the swap endpoint runs `SET CONSTRAINTS roster_spots_slot_key DEFERRED` |
-| At most one default ruleset per sport and season | partial unique index |
+|---|---|
+| Re-ingesting never duplicates data | upsert keys: `universities.slug`, `games (sport_id, source_game_id)`, `game_stats (athlete_id, game_id)`, `athlete_source_ids` PK |
+| **T&C:** a user must accept the current terms (and answer the athlete question) before commissioning or joining a league | `assert_user_may_play_sport()`, hint `TERMS_NOT_ACCEPTED` |
+| **T&C:** a U Sports athlete can play every sport except their own | `user_athlete_declarations` + `assert_user_may_play_sport()` on `leagues` and `fantasy_teams`, hint `ATHLETE_OWN_SPORT` |
+| A user can't declare a sport while still in a league for it | `user_athlete_declarations` trigger |
+| One team per user per league; at most `max_teams` teams | unique constraint + trigger (`LEAGUE_FULL`) |
+| League roster limits are well-formed and use only slots the competition defines | CHECK constraints + `leagues` trigger |
+| An athlete is rostered at most once per league | `UNIQUE (league_id, athlete_id)`, with `league_id` pinned by a composite FK |
+| A rostered athlete plays the league's sport | `roster_spots` trigger (`WRONG_SPORT`) |
+| A slot exists in the league's limits | `roster_spots` trigger (`INVALID_SLOT`) |
+| A starter is eligible for their slot | `roster_spots` trigger (`INELIGIBLE_POSITION`) |
+| Swaps are atomic | `roster_spots_slot_key` is `DEFERRABLE`; run `SET CONSTRAINTS roster_spots_slot_key DEFERRED` inside the swap transaction |
 
-### JSON contracts
+Each trigger error uses SQLSTATE `23514` and a stable `HINT`. The API can map
+the hint straight to an error code.
 
-`roster_config_json`
-```json
-{ "slots": [ { "position": "G", "count": 2, "eligible": ["G"] },
-             { "position": "UTIL", "count": 1, "eligible": ["*"] } ],
-  "bench": 4, "injured_reserve": 1 }
-```
-Starter rows in `roster_spots` use `position_assigned` = slot position and
-`slot_index` from 1 to `count`. Bench rows use `position_assigned = 'BN'`.
-Injured reserve rows use `'IR'`.
+## Seasons
 
-`scoring_rules_json`
-```json
-{ "version": 1,
-  "stats":   { "pts": 1, "reb": 1.2, "ast": 1.5, "to": -1 },
-  "bonuses": [ { "name": "double_double", "value": 5 } ] }
-```
-Points = Σ `raw_stats_json[key] × stats[key]`, plus any bonuses that apply.
-Keys missing from a stat line count as 0.
-
-### Seasons
-
-`season` is `"YYYY-YY"` for winter sports (`2025-26`) and `"YYYY"` for fall
-sports such as football (`2025`).
+`"YYYY-YY"` for winter sports (`2026-27`) and `"YYYY"` for fall sports such as
+football. `games.season_segment` keeps the source's suffix (`2026-27p` for
+playoffs, `2026-27c` for championships). The `athlete_season_stats` view leaves
+out exhibition games.

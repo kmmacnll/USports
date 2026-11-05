@@ -1,116 +1,237 @@
--- Smoke test for schema invariants. Runs in a transaction and rolls back.
+-- Smoke test for schema invariants. Uses synthetic rows inside a transaction
+-- and rolls back, so it is safe against a database that already holds real
+-- ingested data.
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/schema_smoke_test.sql
 -- Requires migrations + seeds. Exits non-zero on the first failed assertion.
+\o /dev/null
 BEGIN;
 
-INSERT INTO universities (name, short_name, slug, conference) VALUES
-  ('University of British Columbia', 'UBC', 'ubc', 'CW'),
-  ('Carleton University', 'Carleton', 'carleton', 'OUA');
-
-INSERT INTO athletes (usports_id, first_name, last_name, university_id, sport_id, position, jersey_number)
-SELECT 'p1', 'Alex', 'Guard', u.id, s.id, 'G', '3'  FROM universities u, sports s WHERE u.slug='ubc'      AND s.code='MBB'
-UNION ALL
-SELECT 'p2', 'Sam',  'Wing',  u.id, s.id, 'F', '00' FROM universities u, sports s WHERE u.slug='carleton' AND s.code='MBB'
-UNION ALL
-SELECT 'h1', 'Jo',   'Skate', u.id, s.id, 'D', '4'  FROM universities u, sports s WHERE u.slug='ubc'      AND s.code='WIH';
-
--- Upsert: re-ingesting the same athlete updates in place.
-INSERT INTO athletes (usports_id, first_name, last_name, university_id, sport_id, position)
-SELECT 'p1', 'Alex', 'Guard', u.id, s.id, 'G/F' FROM universities u, sports s WHERE u.slug='ubc' AND s.code='MBB'
-ON CONFLICT (sport_id, usports_id) DO UPDATE SET position = EXCLUDED.position;
-DO $$ BEGIN
-  ASSERT (SELECT count(*) FROM athletes WHERE usports_id='p1') = 1, 'athlete upsert duplicated';
-  ASSERT (SELECT position FROM athletes WHERE usports_id='p1') = 'G/F', 'athlete upsert did not update';
+-- Helper: assert that a statement fails with a given SQLSTATE (and HINT, if given).
+CREATE FUNCTION pg_temp.expect_error(sql TEXT, state TEXT, hint TEXT DEFAULT NULL) RETURNS VOID
+LANGUAGE plpgsql AS $$
+DECLARE v_state TEXT; v_hint TEXT;
+BEGIN
+  BEGIN
+    EXECUTE sql;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_hint = PG_EXCEPTION_HINT;
+    IF v_state <> state OR (hint IS NOT NULL AND v_hint IS DISTINCT FROM hint) THEN
+      RAISE EXCEPTION 'FAIL: expected % / % but got % / % for: %', state, hint, v_state, v_hint, sql;
+    END IF;
+    RETURN;
+  END;
+  RAISE EXCEPTION 'FAIL: expected % (%) but statement succeeded: %', state, hint, sql;
 END $$;
 
--- Game + stats upsert, season view.
-INSERT INTO games (sport_id, source_game_id, season, game_date, home_university_id, away_university_id, status)
-SELECT s.id, 'g1', '2025-26', '2025-11-07', h.id, a.id, 'FINAL'
-FROM sports s, universities h, universities a WHERE s.code='MBB' AND h.slug='ubc' AND a.slug='carleton';
-
-INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, raw_stats_json, fantasy_points_calculated)
-SELECT at.id, g.id, g.game_date, g.home_university_id, g.away_university_id, '{"pts":10,"reb":5}', 16
-FROM athletes at, games g WHERE at.usports_id='p1' AND g.source_game_id='g1';
-INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, raw_stats_json, fantasy_points_calculated)
-SELECT at.id, g.id, g.game_date, g.home_university_id, g.away_university_id, '{"pts":20,"reb":5,"min":"31:10"}', 26
-FROM athletes at, games g WHERE at.usports_id='p1' AND g.source_game_id='g1'
-ON CONFLICT (athlete_id, game_id) DO UPDATE
-  SET raw_stats_json = EXCLUDED.raw_stats_json, fantasy_points_calculated = EXCLUDED.fantasy_points_calculated;
+-- ---------------------------------------------------------------- scoring
 DO $$ BEGIN
-  ASSERT (SELECT count(*) FROM game_stats) = 1, 'game_stats upsert duplicated';
-  ASSERT (SELECT stat_totals->>'pts' FROM athlete_season_stats) = '20', 'season view totals wrong';
-  ASSERT (SELECT stat_totals ? 'min' FROM athlete_season_stats) = FALSE, 'season view summed a non-numeric stat';
+  ASSERT fantasy_score('{"points":20,"rebounds":5,"assists":4,"steals":1,"blocks":2,"turnovers":3,"minutes":"31:10"}',
+                       (SELECT scoring_rules_json FROM competitions c JOIN sports s ON s.id = c.sport_id
+                         WHERE s.code = 'usports_mbk' AND c.is_default)) = 38.00,
+    'MBK default scoring wrong: expected 20 + 6 + 6 + 3 + 6 - 3 = 38';
 END $$;
 
--- League + team.
-INSERT INTO users (auth_subject, display_name) VALUES ('u1', 'Commish'), ('u2', 'Rival'), ('u3', 'Late');
+-- ---------------------------------------------------------------- real-world data
+INSERT INTO universities (name, slug, conference, is_usports_member) VALUES
+  ('Test U A', 'zz-test-a', 'OUA', TRUE), ('Test U B', 'zz-test-b', 'CW', TRUE);
+
+INSERT INTO athletes (first_name, last_name, university_id, sport_id, position, positions)
+SELECT v.f, v.l, u.id, s.id, v.pos, v.toks
+  FROM (VALUES ('Pat',  'Point',  'zz-test-a', 'usports_mbk', 'G', '{G}'::text[]),
+               ('Cam',  'Centre', 'zz-test-a', 'usports_mbk', 'C', '{C}'),
+               ('Nopo', 'Sition', 'zz-test-b', 'usports_mbk', NULL, '{}'),
+               ('Quinn','Back',   'zz-test-b', 'usports_fb',  'QB', '{QB}')) v(f, l, uslug, scode, pos, toks)
+  JOIN universities u ON u.slug = v.uslug
+  JOIN sports s ON s.code = v.scode;
+
+-- Identity keys are unique per sport.
+INSERT INTO athlete_source_ids (sport_id, id_type, id_value, athlete_id)
+SELECT sport_id, 'name_key', 'zz|pat point', id FROM athletes WHERE last_name = 'Point';
+SELECT pg_temp.expect_error($q$
+  INSERT INTO athlete_source_ids (sport_id, id_type, id_value, athlete_id)
+  SELECT sport_id, 'name_key', 'zz|pat point', id FROM athletes WHERE last_name = 'Centre'$q$, '23505');
+
+-- Game + stat line upsert, season view.
+INSERT INTO games (sport_id, source_game_id, season, season_segment, game_date,
+                   home_university_id, away_university_id, status)
+SELECT s.id, 'zz-g1', '2026-27', '2026-27', '2026-11-07', a.id, b.id, 'FINAL'
+  FROM sports s, universities a, universities b
+ WHERE s.code = 'usports_mbk' AND a.slug = 'zz-test-a' AND b.slug = 'zz-test-b';
+
+INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, raw_stats_json)
+SELECT at.id, g.id, g.game_date, g.home_university_id, g.away_university_id, '{"points":10}'
+  FROM athletes at, games g WHERE at.last_name = 'Point' AND g.source_game_id = 'zz-g1';
+INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id, raw_stats_json)
+SELECT at.id, g.id, g.game_date, g.home_university_id, g.away_university_id, '{"points":20,"rebounds":5}'
+  FROM athletes at, games g WHERE at.last_name = 'Point' AND g.source_game_id = 'zz-g1'
+ON CONFLICT (athlete_id, game_id) DO UPDATE SET raw_stats_json = EXCLUDED.raw_stats_json;
+UPDATE game_stats SET fantasy_points_calculated = fantasy_score(raw_stats_json, '{"points":1,"rebounds":1.2}')
+ WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Point');
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM game_stats gs JOIN athletes a ON a.id = gs.athlete_id WHERE a.last_name = 'Point') = 1,
+    'game_stats upsert duplicated';
+  ASSERT (SELECT stat_averages->>'points' FROM athlete_season_stats s JOIN athletes a ON a.id = s.athlete_id
+           WHERE a.last_name = 'Point') = '20.0', 'season view averages wrong';
+  ASSERT (SELECT fantasy_points_avg FROM athlete_season_stats s JOIN athletes a ON a.id = s.athlete_id
+           WHERE a.last_name = 'Point') = 26.00, 'season view fantasy avg wrong';
+END $$;
+
+-- ---------------------------------------------------------------- users & terms
+INSERT INTO users (auth_subject, display_name) VALUES
+  ('zz-commish', 'Commish'), ('zz-rival', 'Rival'), ('zz-late', 'Late'),
+  ('zz-mbk-athlete', 'Hooper'), ('zz-no-terms', 'Skipper');
+UPDATE users SET terms_version_accepted = (SELECT version FROM terms_versions WHERE is_current),
+                 terms_accepted_at = now(), is_usports_athlete = FALSE
+ WHERE auth_subject LIKE 'zz-%' AND auth_subject <> 'zz-no-terms';
+
+-- Accepting terms requires answering the athlete question.
+SELECT pg_temp.expect_error($q$
+  UPDATE users SET terms_version_accepted = (SELECT version FROM terms_versions WHERE is_current),
+                   terms_accepted_at = now(), is_usports_athlete = NULL
+   WHERE auth_subject = 'zz-no-terms'$q$, '23514');
+
+-- The MBK athlete declares their sport.
+INSERT INTO user_athlete_declarations (user_id, sport_id, university_id)
+SELECT u.id, s.id, un.id FROM users u, sports s, universities un
+ WHERE u.auth_subject = 'zz-mbk-athlete' AND s.code = 'usports_mbk' AND un.slug = 'zz-test-a';
+DO $$ BEGIN
+  ASSERT (SELECT is_usports_athlete FROM users WHERE auth_subject = 'zz-mbk-athlete'), 'declaration did not flag user';
+END $$;
+
+-- A declaration's athlete must play the declared sport.
+SELECT pg_temp.expect_error($q$
+  INSERT INTO user_athlete_declarations (user_id, sport_id, athlete_id)
+  SELECT u.id, s.id, a.id FROM users u, sports s, athletes a
+   WHERE u.auth_subject = 'zz-rival' AND s.code = 'usports_wbk' AND a.last_name = 'Point'$q$, '23514');
+
+-- ---------------------------------------------------------------- leagues
+-- Defaults: roster limits + size copied from the competition.
 INSERT INTO leagues (competition_id, commissioner_id, name, max_teams)
-SELECT c.id, u.id, 'Test League', 2
-FROM competitions c JOIN sports s ON s.id=c.sport_id, users u
-WHERE s.code='MBB' AND c.is_default AND u.auth_subject='u1';
+SELECT c.id, u.id, 'ZZ Hoops', 2
+  FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
+ WHERE s.code = 'usports_mbk' AND c.is_default AND u.auth_subject = 'zz-commish';
+DO $$ BEGIN
+  ASSERT (SELECT roster_size FROM leagues WHERE name = 'ZZ Hoops') = 6, 'roster_size not derived';
+  ASSERT (SELECT roster_limits_json FROM leagues WHERE name = 'ZZ Hoops')
+         = '{"PG":1,"SG":1,"SF":1,"PF":1,"C":1,"BENCH":1}', 'roster limits not copied';
+END $$;
+
+-- Football league with the product's example limits (temporary competition).
+INSERT INTO competitions (name, sport_id, season, roster_config_json, scoring_rules_json)
+SELECT 'ZZ Football', id, '2026',
+       '{"roster_limits":{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4},
+         "position_eligibility":{"DEF":["DL","LB","DB"]}}',
+       '{"passing_yards":0.04}'
+  FROM sports WHERE code = 'usports_fb';
+INSERT INTO leagues (competition_id, commissioner_id, name, max_teams, roster_size, roster_limits_json)
+SELECT c.id, u.id, 'Vanier Cup Chasers', 10, 15, '{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4}'
+  FROM competitions c, users u WHERE c.name = 'ZZ Football' AND u.auth_subject = 'zz-commish';
+
+-- roster_size must match the limits; unknown slots are rejected.
+SELECT pg_temp.expect_error($q$
+  INSERT INTO leagues (competition_id, commissioner_id, name, roster_size, roster_limits_json)
+  SELECT c.id, u.id, 'Bad Size', 14, '{"QB":2,"RB":3,"WR":4,"K":1,"DEF":1,"BENCH":4}'
+    FROM competitions c, users u WHERE c.name = 'ZZ Football' AND u.auth_subject = 'zz-commish'$q$, '23514');
+SELECT pg_temp.expect_error($q$
+  INSERT INTO leagues (competition_id, commissioner_id, name, roster_limits_json)
+  SELECT c.id, u.id, 'Bad Slot', '{"QB":1,"GOALIE":1}'
+    FROM competitions c, users u WHERE c.name = 'ZZ Football' AND u.auth_subject = 'zz-commish'$q$, '23514');
+
+-- Terms must be accepted to commission or join.
+SELECT pg_temp.expect_error($q$
+  INSERT INTO leagues (competition_id, commissioner_id, name)
+  SELECT c.id, u.id, 'No Terms' FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
+   WHERE s.code = 'usports_mbk' AND c.is_default AND u.auth_subject = 'zz-no-terms'$q$, '23514', 'TERMS_NOT_ACCEPTED');
+
+-- T&C §Athlete Eligibility: the MBK athlete can't commission or join MBK...
+SELECT pg_temp.expect_error($q$
+  INSERT INTO leagues (competition_id, commissioner_id, name)
+  SELECT c.id, u.id, 'Own Sport' FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
+   WHERE s.code = 'usports_mbk' AND c.is_default AND u.auth_subject = 'zz-mbk-athlete'$q$, '23514', 'ATHLETE_OWN_SPORT');
+SELECT pg_temp.expect_error($q$
+  INSERT INTO fantasy_teams (league_id, user_id, team_name)
+  SELECT l.id, u.id, 'Hooper FC' FROM leagues l, users u
+   WHERE l.name = 'ZZ Hoops' AND u.auth_subject = 'zz-mbk-athlete'$q$, '23514', 'ATHLETE_OWN_SPORT');
+-- ...but can join any other sport.
 INSERT INTO fantasy_teams (league_id, user_id, team_name)
-SELECT l.id, u.id, 'Team ' || u.auth_subject FROM leagues l, users u WHERE u.auth_subject IN ('u1','u2');
+SELECT l.id, u.id, 'Hooper Plays Football' FROM leagues l, users u
+ WHERE l.name = 'Vanier Cup Chasers' AND u.auth_subject = 'zz-mbk-athlete';
 
--- Capacity trigger.
+-- Declaring a sport while already in a league for it is rejected.
+SELECT pg_temp.expect_error($q$
+  INSERT INTO user_athlete_declarations (user_id, sport_id)
+  SELECT u.id, s.id FROM users u, sports s WHERE u.auth_subject = 'zz-commish' AND s.code = 'usports_fb'$q$,
+  '23514', 'ATHLETE_OWN_SPORT');
+
+-- ---------------------------------------------------------------- teams & capacity
+INSERT INTO fantasy_teams (league_id, user_id, team_name)
+SELECT l.id, u.id, 'Team ' || u.auth_subject FROM leagues l, users u
+ WHERE l.name = 'ZZ Hoops' AND u.auth_subject IN ('zz-commish', 'zz-rival');
+SELECT pg_temp.expect_error($q$
+  INSERT INTO fantasy_teams (league_id, user_id, team_name)
+  SELECT l.id, u.id, 'Overflow' FROM leagues l, users u
+   WHERE l.name = 'ZZ Hoops' AND u.auth_subject = 'zz-late'$q$, '23514', 'LEAGUE_FULL');
+
+-- ---------------------------------------------------------------- roster spots
+CREATE TEMP VIEW t AS SELECT id, league_id, team_name FROM fantasy_teams WHERE team_name LIKE 'Team zz-%';
+
+-- Guard in PG: ok. Centre in BENCH: ok. Position-less athlete on BENCH: ok.
+INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
+SELECT t.id, t.league_id, a.id, 'PG' FROM t, athletes a WHERE t.team_name = 'Team zz-commish' AND a.last_name = 'Point';
+INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
+SELECT t.id, t.league_id, a.id, 'BENCH' FROM t, athletes a WHERE t.team_name = 'Team zz-commish' AND a.last_name = 'Centre';
+INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
+SELECT t.id, t.league_id, a.id, 'BENCH' FROM t, athletes a WHERE t.team_name = 'Team zz-rival' AND a.last_name = 'Sition';
+
 DO $$ BEGIN
-  BEGIN
-    INSERT INTO fantasy_teams (league_id, user_id, team_name)
-    SELECT l.id, u.id, 'Overflow' FROM leagues l, users u WHERE u.auth_subject='u3';
-    RAISE EXCEPTION 'FAIL: league capacity not enforced';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
+  ASSERT (SELECT slot_type FROM roster_spots rs JOIN athletes a ON a.id = rs.athlete_id WHERE a.last_name = 'Point') = 'STARTER',
+    'slot_type not derived';
 END $$;
 
--- Roster: starter + bench.
-INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, slot_type, position_assigned, slot_index)
-SELECT t.id, t.league_id, a.id, 'STARTER', 'G', 1 FROM fantasy_teams t, athletes a WHERE t.team_name='Team u1' AND a.usports_id='p1';
-INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, slot_type, position_assigned, slot_index)
-SELECT t.id, t.league_id, a.id, 'BENCH', 'BN', 1 FROM fantasy_teams t, athletes a WHERE t.team_name='Team u1' AND a.usports_id='p2';
+-- Same athlete twice in a league.
+SELECT pg_temp.expect_error($q$
+  INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
+  SELECT t.id, t.league_id, a.id, 'SG' FROM t, athletes a WHERE t.team_name = 'Team zz-rival' AND a.last_name = 'Point'$q$, '23505');
+-- Wrong sport.
+SELECT pg_temp.expect_error($q$
+  INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
+  SELECT t.id, t.league_id, a.id, 'BENCH' FROM t, athletes a WHERE t.team_name = 'Team zz-rival' AND a.last_name = 'Back'$q$,
+  '23514', 'WRONG_SPORT');
+-- Slot not in the league's roster, and slot index beyond the limit.
+SELECT pg_temp.expect_error($q$
+  UPDATE roster_spots SET position_assigned = 'UTIL'
+   WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Sition')$q$, '23514', 'INVALID_SLOT');
+SELECT pg_temp.expect_error($q$
+  UPDATE roster_spots SET slot_index = 2
+   WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Sition')$q$, '23514', 'INVALID_SLOT');
+-- Positional eligibility: a position-less athlete can't start; a C can't play PG.
+SELECT pg_temp.expect_error($q$
+  UPDATE roster_spots SET position_assigned = 'SF'
+   WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Sition')$q$, '23514', 'INELIGIBLE_POSITION');
 
--- Same athlete cannot be on two teams in a league.
-DO $$ BEGIN
-  BEGIN
-    INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
-    SELECT t.id, t.league_id, a.id, 'BN' FROM fantasy_teams t, athletes a WHERE t.team_name='Team u2' AND a.usports_id='p1';
-    RAISE EXCEPTION 'FAIL: athlete rostered twice in one league';
-  EXCEPTION WHEN unique_violation THEN NULL;
-  END;
-END $$;
+-- Team/league mismatch rejected by composite FK.
+SELECT pg_temp.expect_error($q$
+  INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
+  SELECT t.id, (SELECT id FROM leagues WHERE name = 'Vanier Cup Chasers'), a.id, 'BENCH'
+    FROM t, athletes a WHERE t.team_name = 'Team zz-rival' AND a.last_name = 'Back'$q$, '23503');
 
--- Wrong sport rejected.
-DO $$ BEGIN
-  BEGIN
-    INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
-    SELECT t.id, t.league_id, a.id, 'BN' FROM fantasy_teams t, athletes a WHERE t.team_name='Team u2' AND a.usports_id='h1';
-    RAISE EXCEPTION 'FAIL: hockey player rostered in basketball league';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END $$;
-
--- Team/league mismatch rejected by composite FK (second league, same sport).
-INSERT INTO leagues (competition_id, commissioner_id, name)
-SELECT competition_id, commissioner_id, 'Other League' FROM leagues WHERE name='Test League';
-DO $$ BEGIN
-  BEGIN
-    INSERT INTO roster_spots (fantasy_team_id, league_id, athlete_id, position_assigned)
-    SELECT t.id, (SELECT id FROM leagues WHERE name='Other League'), a.id, 'BN'
-    FROM fantasy_teams t, athletes a WHERE t.team_name='Team u2' AND a.usports_id='p2';
-    RAISE EXCEPTION 'FAIL: roster_spot league_id not pinned to team';
-  EXCEPTION WHEN foreign_key_violation THEN NULL;
-  END;
-END $$;
-
--- Swap starter <-> bench in one transaction via deferred slot constraint.
+-- Swaps run with the slot constraint deferred. Swapping PG <-> BENCH fails here
+-- because the bench player (a C) is not PG-eligible.
 SET CONSTRAINTS roster_spots_slot_key DEFERRED;
-UPDATE roster_spots rs
-   SET slot_type = other.slot_type, position_assigned = other.position_assigned, slot_index = other.slot_index
-  FROM roster_spots other
- WHERE rs.fantasy_team_id = other.fantasy_team_id AND rs.id <> other.id
-   AND rs.athlete_id IN (SELECT id FROM athletes WHERE usports_id IN ('p1','p2'));
+SELECT pg_temp.expect_error($q$
+  UPDATE roster_spots rs SET position_assigned = o.position_assigned, slot_index = o.slot_index
+    FROM roster_spots o
+   WHERE rs.fantasy_team_id = o.fantasy_team_id AND rs.id <> o.id
+     AND rs.fantasy_team_id = (SELECT id FROM t WHERE team_name = 'Team zz-commish')$q$, '23514', 'INELIGIBLE_POSITION');
+-- Valid move in one transaction: the C goes BENCH -> C, the guard goes PG -> BENCH.
+UPDATE roster_spots SET position_assigned = 'C'
+ WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Centre');
+UPDATE roster_spots SET position_assigned = 'BENCH'
+ WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Point');
 SET CONSTRAINTS roster_spots_slot_key IMMEDIATE;
 DO $$ BEGIN
-  ASSERT (SELECT rs.slot_type FROM roster_spots rs JOIN athletes a ON a.id=rs.athlete_id WHERE a.usports_id='p2') = 'STARTER',
-    'swap failed';
+  ASSERT (SELECT position_assigned FROM roster_spots rs JOIN athletes a ON a.id = rs.athlete_id
+           WHERE a.last_name = 'Centre') = 'C', 'swap failed';
 END $$;
 
 \echo 'schema smoke test: ALL PASSED'
