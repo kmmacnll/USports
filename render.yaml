@@ -11,7 +11,8 @@ databases:
     databaseName: varsityhq
     user: varsityhq
     plan: basic-256mb          # paid: the free plan expires
-    region: ohio               # closest Render region to Ontario/Quebec
+    region: virginia           # ALL resources must share the database's region: its internal
+                               # dpg-… hostname only resolves within that region (ENOTFOUND otherwise)
     postgresMajorVersion: "16"
     ipAllowList: []            # private network only; add your IP to connect from a laptop
 
@@ -20,7 +21,7 @@ services:
   - type: web
     name: varsityhq-api
     runtime: node
-    region: ohio
+    region: virginia
     plan: starter
     branch: main
     autoDeploy: true           # deploy on every push to main
@@ -66,7 +67,7 @@ services:
   - type: web
     name: varsityhq-web
     runtime: node
-    region: ohio
+    region: virginia
     plan: starter
     branch: main
     autoDeploy: true
@@ -94,7 +95,7 @@ services:
   - type: cron
     name: varsityhq-ingest
     runtime: python
-    region: ohio
+    region: virginia
     plan: starter
     branch: main
     schedule: "0 7 * * *"      # Render cron is UTC: 07:00 UTC = 2 AM EST (3 AM during EDT)
@@ -115,7 +116,7 @@ services:
   - type: cron
     name: varsityhq-rosters
     runtime: python
-    region: ohio
+    region: virginia
     plan: starter
     branch: main
     schedule: "30 7 * * 1"     # Mondays 07:30 UTC = 2:30 AM EST
