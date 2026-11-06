@@ -149,7 +149,7 @@ verified against final scores); or the team name matched to the schedule.
 | `usports_wbk` 2026-27 | ✅ ran end to end: 568 games, 48 member universities, 1,057 athletes, 3,667 stat lines; second run was a no-op |
 | `usports_fb` 2026-27 | ✅ ran end to end: 102 games, 27 member universities, 1,414 athletes, 5,474 stat lines, every row matched to a team; second run was a no-op |
 | Hockey, volleyball, soccer 2026-27 | ✅ ran end to end; counts are in the PR that added them. The new rulesets are **provisional** |
-| **Roster scraper** | ⚠️ **not yet run against live en.usports.ca.** The host was blocked by the network policy of the environment where this was written. The parser is unit tested on a synthetic page only. Run `--rosters --dry-run -v` once and check the log before relying on it |
+| **Roster scraper** | ⚠️ **not yet verified against live en.usports.ca** (blocked from the environment this was written in). It used to find team pages only through the basketball feed's team links, so hockey, volleyball, soccer and football rosters were never even requested. It now also discovers every sport's team pages from `en.usports.ca/sports/<path>/<season>/teams`, and a run that syncs no team fails with the reason (`HTTP 403`, `blocked by robots.txt`, `no roster table on page`, ...). Check the `varsityhq-rosters` log after the next run |
 | Conferences (OUA/CW/RSEQ/AUS) | not populated yet. `universities.conference` stays NULL until a standings or roster source fills it |
 
 ### Football scoring coverage (Half-PPR)
@@ -163,8 +163,9 @@ verified against final scores); or the team name matched to the schedule.
 | two-point conversions | not in the feeds (3 mentions all season, no clear player attribution) | ❌ score 0 |
 | `DEF` slot | defence stats are stored (`defence_*`) but the ruleset has no defence rules | scores 0 |
 
-The football feeds carry no team page links, so the roster scraper can't
-find football rosters yet. Football athletes have no positions until it can.
+The football feeds carry no team page links; football team pages are found
+through the teams index page instead. Until a roster sync succeeds, football
+positions are inferred from stats for Draft Battles ratings.
 
 ### Known limitations
 - Until the roster sync runs, athletes from box scores have no position. The

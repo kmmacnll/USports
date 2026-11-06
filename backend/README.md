@@ -216,7 +216,8 @@ advisory locks).
 
 ### Ladder
 
-Elo starts at 1000, K = 40 for the first 10 ranked matches, then 24; only
+Elo and divisions are per user across all sports: one ladder, while every
+battle (and every queue match) is a single sport. Elo starts at 1000, K = 40 for the first 10 ranked matches, then 24; only
 Play Random changes it. Divisions: Walk-On, Bench, Starter, Varsity,
 All-Star, Captain, Hall of Fame. A player's first ranked result of a week
 puts them in a cohort of up to 30 in their division; cohorts rank by weekly

@@ -1,9 +1,16 @@
 """usports.ca roster scraper (BeautifulSoup, optional Playwright).
 
 usportspy has no roster endpoint for team sports, so positions, heights and
-class years come from the team pages on en.usports.ca. Team page URLs are
-not guessed: they come from the box-score feed's team links
-(team_seasons.team_url, written by sync_athletes_and_stats).
+class years come from the team pages on en.usports.ca. Team page URLs come
+from the box-score feed's team links when it has them (basketball only:
+team_seasons.team_url, written by sync_athletes_and_stats). For every other
+sport, and any team the feed missed, they are discovered from the sport's
+teams index page (en.usports.ca/sports/<path>/<season>/teams) and matched
+to our universities by slug / name / alias.
+
+A run that syncs no team at all raises RosterSyncFailed with the reasons
+(no team pages, HTTP errors, robots.txt, no roster table), so the cron job
+shows as failed instead of silently succeeding.
 
 Parsing is header-driven (find the table whose header row has a name column
 and a position column), so it doesn't depend on CSS class names.
@@ -16,6 +23,7 @@ relying on it.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
@@ -122,6 +130,88 @@ def parse_roster_html(html: str, base_url: str = "https://en.usports.ca/") -> li
     return []
 
 
+TEAMS_INDEX = "https://en.usports.ca/sports/{path}/{season}/teams"
+_TEAM_HREF = re.compile(r"/sports/[a-z]+/[0-9]{4}-[0-9]{2}[a-z]?/teams(?:\?id=[A-Za-z0-9]+|/[A-Za-z0-9-]+)")
+_GENERIC = re.compile(r"\b(university|universite|universit[eé]|of|de|du|the|college|u)\b")
+
+
+class RosterSyncFailed(RuntimeError):
+    pass
+
+
+def parse_team_links(html: str, base_url: str) -> list[tuple[str, str]]:
+    """Teams index page -> [(team name, absolute team URL)], de-duplicated.
+    Accepts both Presto URL styles: /teams?id=<id> and /teams/<slug>."""
+    soup = BeautifulSoup(html, "html.parser")
+    out: dict[str, str] = {}
+    for a in soup.find_all("a", href=True):
+        href = urljoin(base_url, a["href"])
+        m = _TEAM_HREF.search(urlparse(href).path + ("?" + urlparse(href).query if urlparse(href).query else ""))
+        if not m:
+            continue
+        parts = urlparse(href)
+        q = {k: v for k, v in parse_qsl(parts.query) if k == "id"}
+        url = urlunparse(parts._replace(query=urlencode(q), fragment=""))
+        name = _clean(a.get_text(" "))
+        if not name or name.lower() in ("roster", "schedule", "stats", "teams"):
+            name = out.get(url, "")
+        if url not in out or (name and not out[url]):
+            out[url] = name
+    return [(n, u) for u, n in out.items() if n or "/teams/" in u]
+
+
+def _name_key(s: str) -> str:
+    from .normalize import slugify, strip_accents
+    t = strip_accents(s).lower().replace("'", "")
+    return slugify(_GENERIC.sub(" ", t))
+
+
+def match_university(name: str, url: str, unis: list[tuple[int, str, str, list[str]]]) -> int | None:
+    """unis: (id, name, slug, alias slugs). Matches the URL slug, then the name."""
+    from .normalize import slugify
+    tail = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
+    slug_from_url = slugify(tail) if "/teams/" in urlparse(url).path else None
+    keys = {slugify(name), _name_key(name)} - {""}
+    for uid, uname, uslug, aliases in unis:
+        candidates = {uslug, *aliases}
+        if slug_from_url and slug_from_url in candidates:
+            return uid
+        if keys & (candidates | {slugify(uname), _name_key(uname)}):
+            return uid
+    return None
+
+
+def discover_team_urls(cur: psycopg.Cursor, fetcher: "Fetcher", adapter: SportAdapter, sport: int, season: str) -> dict:
+    """Fill team_seasons.team_url for member teams that have none, from the
+    sport's teams index page. Returns counts for the summary."""
+    cur.execute(
+        """SELECT u.id, u.name, u.slug, coalesce(array_agg(a.alias_slug) FILTER (WHERE a.alias_slug IS NOT NULL), '{}')
+             FROM universities u LEFT JOIN university_aliases a ON a.university_id = u.id
+            WHERE u.is_usports_member GROUP BY u.id""")
+    unis = [(r[0], r[1], r[2], list(r[3])) for r in cur.fetchall()]
+    cur.execute("SELECT university_id FROM team_seasons WHERE sport_id = %s AND season = %s AND team_url IS NOT NULL",
+                (sport, season))
+    known = {r[0] for r in cur.fetchall()}
+    index = TEAMS_INDEX.format(path=adapter.usports_path, season=season)
+    links = parse_team_links(fetcher.get(index), index)
+    found, unmatched = {}, []
+    for name, url in links:
+        uid = match_university(name, url, unis)
+        if uid is None:
+            unmatched.append(name or url)
+        elif uid not in known and uid not in found:
+            found[uid] = url
+    cur.executemany(
+        """INSERT INTO team_seasons (university_id, sport_id, season, team_url) VALUES (%s, %s, %s, %s)
+           ON CONFLICT (sport_id, season, university_id) DO UPDATE SET team_url = EXCLUDED.team_url
+            WHERE team_seasons.team_url IS NULL""",
+        [(uid, sport, season, url) for uid, url in found.items()])
+    if unmatched:
+        log.info("teams index %s: %d link(s) not matched to a member university: %s",
+                 index, len(unmatched), ", ".join(unmatched[:10]))
+    return {"index_links": len(links), "discovered": len(found), "unmatched": len(unmatched)}
+
+
 def roster_url(team_url: str) -> str:
     """Team page -> roster view (adds view=roster, keeping the team id)."""
     parts = urlparse(team_url)
@@ -190,10 +280,19 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
     cache_conn = _cache_connection()
     fetcher = Fetcher(render=render, cache=DbResponseCache(cache_conn) if cache_conn else None)
     summary = {"sport": sport_code, "season": season, "teams": 0, "teams_failed": 0,
-               "teams_no_table": 0, "athletes_updated": 0, "athletes_new": 0}
+               "teams_no_table": 0, "teams_synced": 0, "athletes_updated": 0, "athletes_new": 0,
+               "discovery": None, "errors": {}}
+    errors: dict[str, int] = summary["errors"]
     try:
         with conn.cursor() as cur:
             sport = db.sport_id(cur, sport_code)
+        try:
+            with conn.transaction(), conn.cursor() as cur:
+                summary["discovery"] = discover_team_urls(cur, fetcher, adapter, sport, season)
+        except Exception as e:  # noqa: BLE001 - the feed's links may still work
+            errors[f"teams index: {_reason(e)}"] = 1
+            log.warning("teams index for %s %s failed: %s", sport_code, season, e)
+        with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT ts.id, ts.university_id, ts.team_url, u.name
@@ -215,10 +314,12 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
                 entries = parse_roster_html(fetcher.get(url), url)
             except Exception as e:  # one bad page must not abort the run
                 summary["teams_failed"] += 1
+                errors[_reason(e)] = errors.get(_reason(e), 0) + 1
                 log.warning("roster fetch failed for %s (%s): %s", uni_name, url, e)
                 continue
             if not entries:
                 summary["teams_no_table"] += 1
+                errors["no roster table on page"] = errors.get("no roster table on page", 0) + 1
                 log.warning("no roster table found for %s at %s (try --render)", uni_name, url)
                 continue
             with conn.transaction(), conn.cursor() as cur:
@@ -226,7 +327,11 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
                 cur.execute("UPDATE team_seasons SET roster_synced_at = now() WHERE id = %s", (ts_id,))
             summary["athletes_new"] += new
             summary["athletes_updated"] += updated
+            summary["teams_synced"] += 1
             log.info("%s: %d roster entries (%d new)", uni_name, len(entries), new)
+        if summary["teams_synced"] == 0:
+            why = "; ".join(f"{k} x{v}" for k, v in errors.items()) or "no team pages known"
+            raise RosterSyncFailed(f"{sport_code} {season}: no roster synced ({summary['teams']} team page(s) tried; {why})")
         return summary
     finally:
         fetcher.close()
@@ -234,6 +339,16 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
             cache_conn.close()
         if own_conn:
             conn.close()
+
+
+def _reason(e: Exception) -> str:
+    """Short, groupable failure reason for the summary."""
+    if isinstance(e, RobotsDisallowed):
+        return "blocked by robots.txt"
+    resp = getattr(e, "response", None)
+    if resp is not None and getattr(resp, "status_code", None):
+        return f"HTTP {resp.status_code}"
+    return type(e).__name__
 
 
 def _upsert_roster(cur: psycopg.Cursor, sport: int, uid: int, entries: list[RosterEntry],
