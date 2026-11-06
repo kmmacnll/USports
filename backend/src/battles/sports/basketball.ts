@@ -92,7 +92,7 @@ export const basketball: BattleSportConfig<BasketballSim> = {
     foulRate: 0.11,
     freeThrowBase: 0.72,
     offRebBase: 0.27,
-    sensitivity: 0.012,
+    sensitivity: 0.0098,
     otSeconds: 300,
   },
   timing: { regulationMs: 160_000, overtimeMs: 45_000 },

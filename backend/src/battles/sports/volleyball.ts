@@ -77,7 +77,7 @@ export const volleyball: BattleSportConfig<VolleyballSim> = {
     killBase: 0.44,
     blockBase: 0.09,
     attackErrorBase: 0.08,
-    sensitivity: 0.02,
+    sensitivity: 0.0084,
     attackShare: { OH: 0.34, OPP: 0.22, MB: 0.1, S: 0.0 },
   },
   timing: { regulationMs: 150_000, overtimeMs: 40_000 },
