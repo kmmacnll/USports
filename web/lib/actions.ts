@@ -24,7 +24,13 @@ export async function signUp(_: unknown, form: FormData): Promise<ActionResult> 
   if (password !== confirmation) return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Passwords do not match' } };
   const result = await run(() => api<{ token: string }>('/auth/signup', {
     method: 'POST', auth: false,
-    body: { email: String(form.get('email') ?? '').trim(), password, password_confirmation: confirmation },
+    body: {
+      name: String(form.get('name') ?? '').trim(),
+      email: String(form.get('email') ?? '').trim(),
+      password,
+      password_confirmation: confirmation,
+      university: String(form.get('university') ?? '') || undefined,
+    },
   }));
   if (!result.ok) return result;
   await setToken(result.data.token);

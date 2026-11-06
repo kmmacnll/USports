@@ -9,7 +9,8 @@ db/
 ├── migrations/
 │   ├── 0001_init_schema.{up,down}.sql
 │   ├── 0002_multi_sport.{up,down}.sql   # season_type, stat_payload_json, '*' eligibility
-│   └── 0003_password_auth.{up,down}.sql # users.password_hash (email sign-up)
+│   ├── 0003_password_auth.{up,down}.sql # users.password_hash (email sign-up)
+│   └── 0004_user_university.{up,down}.sql # users.university_id (optional, at sign-up)
 ├── seeds/                             # idempotent reference data
 │   ├── 0001_sports.sql
 │   ├── 0002_terms.sql

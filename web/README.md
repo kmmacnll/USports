@@ -21,7 +21,7 @@ npm run build && npm start      # production
 | `/leagues/[id]` | League header and invite code; roster grid split into Starters and Bench. Drag a player onto a slot, or tap a player and then a highlighted slot; occupied slots swap. Also: player stat popovers, drop, a free-agent search to add players, and a teams list (click a team to view its roster) |
 | `/players` | Player directory: search, then filter by university, conference and position; sort; paginate; click a name for the stat popover. The URL holds all filters, so views can be shared |
 | `/login` | Email + password sign-in. In local dev, also "continue as" any name |
-| `/signup` | Create an account: email, password, confirm password |
+| `/signup` | Create an account: name, email, optional university, password, confirm password |
 
 ## How it talks to the API
 

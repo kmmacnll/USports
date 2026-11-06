@@ -4,17 +4,18 @@ import { LogIn, UserPlus } from 'lucide-react';
 import { useActionState, useState } from 'react';
 
 import { signIn, signInAsDevUser, signUp } from '@/lib/actions';
+import type { University } from '@/lib/types';
 
 import { ErrorNote } from './ui';
 
 // Controlled email field: React resets uncontrolled fields after every form
 // action, which would wipe the email after a failed attempt.
-function EmailField() {
+function EmailField({ autoFocus = true }: { autoFocus?: boolean }) {
   const [email, setEmail] = useState('');
   return (
     <div>
       <label className="label" htmlFor="email">Email</label>
-      <input id="email" name="email" type="email" required maxLength={254} autoComplete="email" autoFocus
+      <input id="email" name="email" type="email" required maxLength={254} autoComplete="email" autoFocus={autoFocus}
         value={email} onChange={(e) => setEmail(e.target.value)} className="input" />
     </div>
   );
@@ -35,14 +36,28 @@ export function SignInForm() {
   );
 }
 
-export function SignUpForm() {
+export function SignUpForm({ universities }: { universities: University[] }) {
   const [state, action, pending] = useActionState(signUp, null);
+  const [name, setName] = useState('');
+  const [university, setUniversity] = useState('');
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const mismatch = confirmation.length > 0 && password !== confirmation;
   return (
     <form action={action} className="space-y-4">
-      <EmailField />
+      <div>
+        <label className="label" htmlFor="name">Name</label>
+        <input id="name" name="name" required minLength={2} maxLength={40} autoComplete="name" autoFocus
+          value={name} onChange={(e) => setName(e.target.value)} className="input" />
+      </div>
+      <EmailField autoFocus={false} />
+      <div>
+        <label className="label" htmlFor="university">University (optional)</label>
+        <select id="university" name="university" value={university} onChange={(e) => setUniversity(e.target.value)} className="input">
+          <option value="">—</option>
+          {universities.map((u) => <option key={u.university_id} value={u.university_id}>{u.name}</option>)}
+        </select>
+      </div>
       <div>
         <label className="label" htmlFor="password">Password</label>
         <input id="password" name="password" type="password" required minLength={8} maxLength={128} autoComplete="new-password"

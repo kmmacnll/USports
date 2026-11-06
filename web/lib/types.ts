@@ -81,6 +81,7 @@ export interface Game {
 export interface Me {
   user_id: string;
   display_name: string;
+  university: { university_id: string; name: string } | null;
   terms: { current_version: string | null; accepted_version: string | null; needs_acceptance: boolean };
   is_usports_athlete: boolean | null;
   athlete_sports: string[];
