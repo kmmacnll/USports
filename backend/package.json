@@ -14,7 +14,11 @@
     "test": "vitest run",
     "migrate": "node dist/migrate.js",
     "migrate:dev": "tsx --env-file-if-exists=.env src/migrate.ts",
-    "token": "node dist/mint-token.js"
+    "token": "node dist/mint-token.js",
+    "ratings": "node --env-file-if-exists=.env dist/battles/ratings/cli.js",
+    "ratings:dev": "tsx --env-file-if-exists=.env src/battles/ratings/cli.ts",
+    "ratings:top25": "tsx --env-file-if-exists=.env src/battles/ratings/top25.ts",
+    "dev:seed": "tsx --env-file-if-exists=.env src/battles/dev/seed.ts"
   },
   "dependencies": {
     "express": "5.3.0",
