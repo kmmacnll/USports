@@ -16,15 +16,14 @@ relying on it.
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import psycopg
-import requests
 from bs4 import BeautifulSoup, Tag
 
 from . import db
+from .polite_http import USER_AGENT as POLITE_USER_AGENT, DbResponseCache, PoliteHttpClient, RobotsDisallowed
 from .normalize import (
     height_to_cm, normalize_person_name, player_id_from_link, position_tokens, split_name,
 )
@@ -33,8 +32,9 @@ from .sports import SportAdapter, get_adapter
 
 log = logging.getLogger(__name__)
 
-USER_AGENT = "usports-fantasy-ingest/0.1 (+roster sync; contact via repository)"
-REQUEST_INTERVAL_S = 1.0
+USER_AGENT = POLITE_USER_AGENT
+REQUEST_INTERVAL_S = 2.0
+ROSTER_CACHE_MAX_AGE_S = 20 * 3600      # rosters change rarely; the weekly job re-fetches conditionally
 
 HEADER_SYNONYMS: dict[str, tuple[str, ...]] = {
     "name": ("name", "player", "full name"),
@@ -131,35 +131,22 @@ def roster_url(team_url: str) -> str:
 
 
 class Fetcher:
-    def __init__(self, render: bool = False):
-        self.session = requests.Session()
-        self.session.headers["User-Agent"] = USER_AGENT
+    """Roster pages through PoliteHttpClient: robots.txt respected, rate
+    limited per host, raw HTML cached in raw_source_responses."""
+
+    def __init__(self, render: bool = False, cache=None, client: PoliteHttpClient | None = None):
+        self.client = client or PoliteHttpClient(source="usports_roster", cache=cache,
+                                                 min_interval_s=REQUEST_INTERVAL_S, user_agent=USER_AGENT)
         self.render = render
-        self._last = 0.0
         self._browser = None
 
-    def _throttle(self) -> None:
-        wait = REQUEST_INTERVAL_S - (time.monotonic() - self._last)
-        if wait > 0:
-            time.sleep(wait)
-        self._last = time.monotonic()
-
     def get(self, url: str) -> str:
-        self._throttle()
         if self.render:
+            if not self.client.allowed(url):
+                raise RobotsDisallowed(f"robots.txt disallows {url}")
+            self.client._throttle(urlparse(url).netloc, self.client.crawl_delay(url))
             return self._render(url)
-        for attempt in range(3):
-            try:
-                r = self.session.get(url, timeout=30)
-                if r.status_code in (429, 502, 503, 504):
-                    raise requests.HTTPError(f"{r.status_code}", response=r)
-                r.raise_for_status()
-                return r.text
-            except requests.RequestException:
-                if attempt == 2:
-                    raise
-                time.sleep(2 ** (attempt + 1))
-        raise AssertionError("unreachable")
+        return self.client.get(url, max_age_s=ROSTER_CACHE_MAX_AGE_S)
 
     def _render(self, url: str) -> str:
         """Client-side rendered pages: needs `pip install playwright` and its browser."""
@@ -180,6 +167,17 @@ class Fetcher:
             self._pw.stop()
 
 
+def _cache_connection():
+    """Separate autocommit connection for the raw-page cache, so cached pages
+    are kept even when a team's upsert rolls back. None without DATABASE_URL."""
+    try:
+        c = db.connect()
+        c.autocommit = True
+        return c
+    except SystemExit:
+        return None
+
+
 def sync_rosters(sport_code: str, season: str | None = None, *,
                  conn: psycopg.Connection | None = None, render: bool = False) -> dict:
     """Scrape every member team's roster page for one sport/season and upsert
@@ -189,7 +187,8 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
     season = season or current_season()
     own_conn = conn is None
     conn = conn or db.connect()
-    fetcher = Fetcher(render=render)
+    cache_conn = _cache_connection()
+    fetcher = Fetcher(render=render, cache=DbResponseCache(cache_conn) if cache_conn else None)
     summary = {"sport": sport_code, "season": season, "teams": 0, "teams_failed": 0,
                "teams_no_table": 0, "athletes_updated": 0, "athletes_new": 0}
     try:
@@ -231,6 +230,8 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
         return summary
     finally:
         fetcher.close()
+        if cache_conn:
+            cache_conn.close()
         if own_conn:
             conn.close()
 

@@ -15,11 +15,57 @@ python ingest_usports.py --sport usports_mhk,usports_mvb   # specific sports
 python ingest_usports.py --sport usports_mbk --rosters     # ...plus usports.ca roster pages
 python ingest_usports.py --sport all --dry-run             # run everything, then roll back
 python ingest_usports.py --sport all --strict              # exit 1 if any sport fails
+python ingest_usports.py --sport all --backfill            # every season from 2025-26 (the floor) to now
+python ingest_usports.py --sport all --in-season-only      # nightly: skip sports out of season
+python ingest_usports.py --sport all --cache-dir .cache    # keep raw CSVs of every download, reuse < 6h old
+python ingest_usports.py --check-sources                   # robots.txt status of every scraped site
 pytest -q                                                  # unit tests (offline)
 PIPELINE_TEST_DATABASE_URL=postgres://…/postgres pytest -q  # + integration tests on a real Postgres
 ```
 
 Re-running is safe and cheap. A second run with no source changes writes 0 rows.
+
+## Data floor: 2025-26 onward only
+
+`seasons.MIN_SEASON = "2025-26"`. `--season` refuses anything earlier, and
+`load_frames()` / `sync_athletes_and_stats()` refuse it too, so no code path
+can ingest an older season. `--backfill` ingests every season from the floor
+to the current one; the nightly job ingests the current season only.
+
+## Sources, robots.txt and terms (Draft Battles phase 1)
+
+Stats reach `sync_athletes_and_stats()` through one interface,
+`sources.StatsSource` (`schedule()` + `box_frames()`, returning the frames the
+`BoxScoreSpec`s describe). A licensed feed later replaces the scrapers by
+implementing those two methods; nothing downstream changes.
+
+| Source | Class | Notes |
+|---|---|---|
+| usportspy (default) | `UsportspySource` | open U Sports data published as GitHub release CSVs |
+| local CSVs | `CsvDirSource` | `--source-dir`; offline replays and tests |
+| raw cache | `CachingSource` | `--cache-dir`: keeps a raw copy of every frame downloaded and reuses it while fresh |
+| OUA, Canada West, RSEQ, AUS | `CONFERENCE_SITES` | **not enabled.** Each needs its robots.txt checked (`--check-sources`) and a person to review its terms and set `terms_reviewed=True`; `conference_source()` refuses until then |
+
+Every HTML page (roster pages today, conference pages later) is fetched
+through `polite_http.PoliteHttpClient`:
+- **robots.txt** is read once per host per run, and a disallowed URL is never
+  requested (`RobotsDisallowed`). If robots.txt is unreachable (5xx/network),
+  the host is treated as disallowed;
+- **rate limit**: one request per host every 2 s, or the host's `Crawl-delay` if longer;
+- **raw responses** are stored in `raw_source_responses` (migration 0006), one
+  row per URL, and refetched conditionally (ETag / Last-Modified);
+- 429/5xx responses are retried with backoff.
+
+> ⚠️ robots.txt and the terms of oua.ca, canadawest.org, rseq.ca,
+> atlanticuniversitysport.com and en.usports.ca could **not** be read from the
+> environment this was written in (its network policy blocks those hosts). Run
+> `python ingest_usports.py --check-sources` from a machine that can reach them,
+> and read each site's terms, before enabling any conference source.
+
+Raw stat lines (`game_stats`, incl. the per-game box-score `position`) are
+stored separately from computed ratings (`player_ratings`, owned by the API's
+Draft Battles module), so ratings can always be recomputed from scratch.
+Player photos are never fetched or stored.
 
 ## Data sources
 
@@ -146,5 +192,7 @@ find football rosters yet. Football athletes have no positions until it can.
 ## Scheduling
 
 On Render, both jobs are defined in `render.yaml` (see `docs/deploy-render.md`):
-stats daily at 2 AM Eastern, rosters weekly. Both pass `--no-season-check`, because
+stats daily at 2 AM Eastern (`--in-season-only`, so a sport's job is a no-op
+outside its season window in `seasons.SEASON_WINDOWS`), rosters weekly. The API
+recomputes player ratings when it sees new stat lines (see `backend/README.md`). Both pass `--no-season-check`, because
 the GitHub API is rate-limited per IP and Render's outbound IPs are shared.

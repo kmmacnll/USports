@@ -11,7 +11,8 @@ db/
 │   ├── 0002_multi_sport.{up,down}.sql   # season_type, stat_payload_json, '*' eligibility
 │   ├── 0003_password_auth.{up,down}.sql # users.password_hash (email sign-up)
 │   ├── 0004_user_university.{up,down}.sql # users.university_id (optional, at sign-up)
-│   └── 0005_season_stats_matview.{up,down}.sql # athlete_season_stats precomputed; pipeline refreshes it
+│   ├── 0005_season_stats_matview.{up,down}.sql # athlete_season_stats precomputed; pipeline refreshes it
+│   └── 0006_stats_sources.{up,down}.sql   # game_stats.position, raw_source_responses (scrape cache)
 ├── seeds/                             # idempotent reference data
 │   ├── 0001_sports.sql
 │   ├── 0002_terms.sql
