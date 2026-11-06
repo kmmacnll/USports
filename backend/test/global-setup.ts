@@ -35,6 +35,7 @@ export async function setup() {
   const fixtures = new pg.Client({ connectionString: url.toString() });
   await fixtures.connect();
   await fixtures.query(readFileSync(resolve(here, 'fixtures.sql'), 'utf8'));
+  await fixtures.query('REFRESH MATERIALIZED VIEW athlete_season_stats'); // as the pipeline does after a sync
   await fixtures.end();
 
   process.env.TEST_DATABASE_URL = url.toString();

@@ -1,13 +1,11 @@
 import { LayoutDashboard, LogIn, LogOut, Search, Shield } from 'lucide-react';
 import Link from 'next/link';
 
-import { apiOrNull } from '@/lib/api';
+import { getMe } from '@/lib/api';
 import { signOut } from '@/lib/actions';
-import { getCredentials } from '@/lib/session';
-import type { Me } from '@/lib/types';
 
 export async function Nav() {
-  const me = (await getCredentials()) ? await apiOrNull<Me>('/me').catch(() => null) : null;
+  const me = await getMe();
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-900/70 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">

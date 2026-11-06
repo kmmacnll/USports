@@ -1,7 +1,9 @@
 import 'server-only';
 
+import { cache } from 'react';
+
 import { getCredentials } from './session';
-import type { ApiErrorBody } from './types';
+import type { ApiErrorBody, Me } from './types';
 
 /**
  * Reusable server-side client for the VarsityHQ API.
@@ -83,3 +85,10 @@ export async function apiOrNull<T>(path: string, opts?: ApiOptions): Promise<T |
     throw err;
   }
 }
+
+/**
+ * The signed-in user, or null. Memoised per request, so the nav and the page
+ * share one /me call instead of making two.
+ */
+export const getMe = cache(async (): Promise<Me | null> =>
+  ((await getCredentials()) ? apiOrNull<Me>('/me').catch(() => null) : null));

@@ -67,6 +67,7 @@ SELECT at.id, g.id, g.game_date, g.home_university_id, g.away_university_id, '{"
 ON CONFLICT (athlete_id, game_id) DO UPDATE SET stat_payload_json = EXCLUDED.stat_payload_json;
 UPDATE game_stats SET fantasy_points_calculated = fantasy_score(stat_payload_json, '{"points":1,"rebounds":1.2}')
  WHERE athlete_id = (SELECT id FROM athletes WHERE last_name = 'Point');
+REFRESH MATERIALIZED VIEW athlete_season_stats;  -- the pipeline does this after each sync
 DO $$ BEGIN
   ASSERT (SELECT count(*) FROM game_stats gs JOIN athletes a ON a.id = gs.athlete_id WHERE a.last_name = 'Point') = 1,
     'game_stats upsert duplicated';

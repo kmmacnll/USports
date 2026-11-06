@@ -10,7 +10,8 @@ db/
 │   ├── 0001_init_schema.{up,down}.sql
 │   ├── 0002_multi_sport.{up,down}.sql   # season_type, stat_payload_json, '*' eligibility
 │   ├── 0003_password_auth.{up,down}.sql # users.password_hash (email sign-up)
-│   └── 0004_user_university.{up,down}.sql # users.university_id (optional, at sign-up)
+│   ├── 0004_user_university.{up,down}.sql # users.university_id (optional, at sign-up)
+│   └── 0005_season_stats_matview.{up,down}.sql # athlete_season_stats precomputed; pipeline refreshes it
 ├── seeds/                             # idempotent reference data
 │   ├── 0001_sports.sql
 │   ├── 0002_terms.sql
@@ -142,5 +143,7 @@ the hint straight to an error code.
 Every sport uses `"YYYY-YY"` (`2026-27`); the U Sports feeds label football
 that way too. `usports_current_season()` rolls over on July 1, and the seeds
 create the current season's rulesets on every deploy. `games.season_segment` keeps the source's suffix (`2026-27p` for
-playoffs, `2026-27c` for championships). The `athlete_season_stats` view leaves
-out exhibition games.
+playoffs, `2026-27c` for championships). The `athlete_season_stats` materialized view
+leaves out exhibition games. It is precomputed, so it only changes when the
+pipeline refreshes it at the end of each sync (`REFRESH MATERIALIZED VIEW
+CONCURRENTLY athlete_season_stats` if you edit `game_stats` by hand).

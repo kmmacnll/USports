@@ -139,3 +139,14 @@ def insert_athlete(cur: psycopg.Cursor, sport: int, university_id: int, first: s
 
 __all__ = ["Jsonb", "connect", "sport_id", "upsert_universities", "upsert_games",
            "upsert_team_seasons", "load_identity", "save_identity_keys", "insert_athlete"]
+
+
+def refresh_season_stats(cur) -> None:
+    """Recompute the athlete_season_stats materialized view (migration 0005)
+    the API reads player stats from. CONCURRENTLY keeps it readable while it
+    refreshes. Skipped while the database is still on the plain view (API not
+    yet deployed), so an ingest never fails because of deploy order."""
+    cur.execute("SELECT relkind FROM pg_class WHERE oid = to_regclass('athlete_season_stats')")
+    row = cur.fetchone()
+    if row and row[0] == "m":
+        cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY athlete_season_stats")

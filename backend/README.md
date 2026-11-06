@@ -122,4 +122,4 @@ test/               vitest + supertest against a real Postgres
 - Draft, waivers, trades, and lineup locks at game time (swaps are currently allowed at any time).
 - Weekly matchups and standings.
 - Rate limiting. Put the API behind a gateway, or add `express-rate-limit`, before going public.
-- `athlete_season_stats` is a plain view, which is fast enough at current volume (~100 ms per search). Switch it to a materialised view refreshed by the pipeline when the data grows.
+- `athlete_season_stats` is a materialized view (migration 0005) refreshed by the pipeline after every sync, so player searches read precomputed rows instead of re-aggregating every box score.
