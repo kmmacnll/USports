@@ -1,6 +1,8 @@
 import { pino } from 'pino';
 
-import { createApp } from './app.js';
+import { createApp, createDeps } from './app.js';
+import { provisionSubject } from './auth.js';
+import { startScheduler } from './battles/scheduler.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { migrateOptionsFromEnv, runMigrations } from './migrate.js';
@@ -16,7 +18,9 @@ try {
 const logger = pino({ level: cfg.LOG_LEVEL });
 const db = createPool(cfg.DATABASE_URL, cfg.DATABASE_POOL_MAX);
 let ready = !cfg.MIGRATE_ON_START;
-const app = createApp(cfg, db, logger, () => ready);
+const deps = createDeps(cfg, db, logger);
+const app = createApp(cfg, db, logger, () => ready, deps);
+let stopScheduler: (() => void) | undefined;
 
 // Listen first, so the host detects the open port even while migrations wait
 // for a database that is still provisioning. Requests get 503 until ready.
@@ -25,11 +29,14 @@ const server = app.listen(cfg.PORT, () => {
     auth: { jwt: Boolean(cfg.JWT_SECRET || cfg.JWT_JWKS_URL), devHeader: cfg.AUTH_DEV_HEADER } },
   'usports fantasy api listening');
 });
+deps.hub.attach(server, (subject) => provisionSubject(db, subject));
+if (!cfg.MIGRATE_ON_START) stopScheduler = startScheduler(db, deps.battles, logger);
 
 if (cfg.MIGRATE_ON_START) {
   runMigrations(migrateOptionsFromEnv())
     .then(() => {
       ready = true;
+      stopScheduler = startScheduler(db, deps.battles, logger);
       logger.info('migrations complete; ready');
     })
     .catch((err) => {
@@ -41,6 +48,8 @@ if (cfg.MIGRATE_ON_START) {
 
 function shutdown(signal: string) {
   logger.info({ signal }, 'shutting down');
+  stopScheduler?.();
+  deps.hub.close();
   server.close(() => {
     db.end().finally(() => process.exit(0));
   });

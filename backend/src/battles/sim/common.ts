@@ -71,7 +71,7 @@ export class MatchBuilder {
     this.events.push({
       segment: e.segment ?? 'reg', at: Math.max(0, Math.min(1, e.at)), period: e.period, clock: e.clock, type: e.type,
       side: e.side, playerIds: (e.players ?? []).map((p) => p.id), text: e.text,
-      scoreA: this.score.A, scoreB: this.score.B, momentum: Math.round(this.momentum * 100) / 100,
+      scoreA: this.score.A, scoreB: this.score.B, momentum: Math.round(this.momentum * 100) / 100 + 0,
     });
   }
 
@@ -104,7 +104,7 @@ export class MatchBuilder {
     this.swing(winner, 0.2);
     timed.push({
       t: end, period: finalPeriod ?? last?.period ?? 'FINAL', clock: finalClock, type: 'final', side: winner, playerIds: [],
-      text: finalText(winner), scoreA: this.score.A, scoreB: this.score.B, momentum: Math.round(this.momentum * 100) / 100,
+      text: finalText(winner), scoreA: this.score.A, scoreB: this.score.B, momentum: Math.round(this.momentum * 100) / 100 + 0,
     });
 
     // Fill long silences with score-aware colour, so the feed never stalls.
