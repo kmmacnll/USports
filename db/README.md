@@ -8,7 +8,8 @@ db/
 ├── migrate.sh                         # up | down | seed | status
 ├── migrations/
 │   ├── 0001_init_schema.{up,down}.sql
-│   └── 0002_multi_sport.{up,down}.sql   # season_type, stat_payload_json, '*' eligibility
+│   ├── 0002_multi_sport.{up,down}.sql   # season_type, stat_payload_json, '*' eligibility
+│   └── 0003_password_auth.{up,down}.sql # users.password_hash (email sign-up)
 ├── seeds/                             # idempotent reference data
 │   ├── 0001_sports.sql
 │   ├── 0002_terms.sql

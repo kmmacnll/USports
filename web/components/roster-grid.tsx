@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeftRight, GripVertical, Trash2 } from 'lucide-react';
+import { GripVertical, Trash2 } from 'lucide-react';
 import { useEffect, useOptimistic, useState, useTransition } from 'react';
 
 import { dropAthlete, swapSlot } from '@/lib/actions';
@@ -95,12 +95,6 @@ export function RosterGrid({ leagueId, slots, eligibility, editable, columns }: 
 
   return (
     <div className="space-y-5">
-      {editable && (
-        <p className="flex items-center gap-2 text-xs text-slate-400">
-          <ArrowLeftRight className="size-3.5 text-accent" />
-          Drag a player onto another slot, or tap a player and then tap a highlighted slot. Occupied slots swap.
-        </p>
-      )}
       {error && <ErrorNote message={error} />}
       {section('Starters', starters)}
       {section('Bench', bench)}

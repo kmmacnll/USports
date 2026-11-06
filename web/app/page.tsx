@@ -44,7 +44,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="grid gap-6 lg:grid-cols-3">
           <Card title="My leagues" icon={<Trophy className="size-4 text-accent" />} className="lg:col-span-2">
             {leagues.length === 0 ? (
-              <Empty>You&apos;re not in any leagues yet. Create one or join with an invite code.</Empty>
+              <Empty>No leagues yet</Empty>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {leagues.map(({ league, team, rank, teams }) => (
@@ -83,32 +83,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SportTabs sports={sports} active={activeSport} base="/" />
-        {sport?.season && <span className="text-xs text-slate-500">{sport.season} season · {sport.ruleset_name} scoring</span>}
-      </div>
+      <SportTabs sports={sports} active={activeSport} base="/" />
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <Card title="Games" icon={<Calendar className="size-4 text-accent" />} className="lg:col-span-3"
-          action={<span className="text-xs text-slate-500">{games.data.length ? `${shownGames.length} of ${games.data.length} · last 3 days, next 4` : ''}</span>}>
+        <Card title="Games" icon={<Calendar className="size-4 text-accent" />} className="lg:col-span-3">
           {games.data.length === 0 ? (
-            <Empty>No {sport?.sport_name ?? ''} games in the last 3 days or the next 4.</Empty>
+            <Empty>No games</Empty>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2">
               {shownGames.map((g) => <GameRow key={g.game_id} game={g} mine={myUniversities} />)}
             </ul>
-          )}
-          {me && myUniversities.size > 0 && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-              <span className="size-2 rounded-full bg-accent" /> Your rostered players&apos; teams
-            </p>
           )}
         </Card>
 
         <Card title="Top performers" icon={<Flame className="size-4 text-accent" />} className="lg:col-span-2"
           action={<Link href={`/players?sport=${activeSport}`} className="text-xs text-accent hover:underline">All players</Link>}>
           {!top || top.data.length === 0 ? (
-            <Empty>No stats yet this season.</Empty>
+            <Empty>No stats yet</Empty>
           ) : (
             <ol className="space-y-1">
               {top.data.map((a, i) => (
@@ -138,22 +129,17 @@ function Hero({ me }: { me: Me | null }) {
   if (me) {
     return (
       <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-slate-400">Welcome back</p>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{me.display_name}</h1>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{me.display_name}</h1>
         <Activity className="hidden size-8 text-accent/60 sm:block" />
       </div>
     );
   }
   return (
     <div className="glass overflow-hidden p-8 sm:p-10">
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">U Sports fantasy</p>
-      <h1 className="mt-2 max-w-2xl text-3xl font-black tracking-tight sm:text-5xl">
+      <h1 className="max-w-2xl text-3xl font-black tracking-tight sm:text-5xl">
         Draft real Canadian university athletes. Score with real box scores.
       </h1>
-      <p className="mt-4 max-w-xl text-slate-400">Basketball and football leagues built on every U Sports game, updated daily.</p>
-      <Link href="/login" className="btn-primary mt-6">Get started</Link>
+      <Link href="/signup" className="btn-primary mt-6">Get started</Link>
     </div>
   );
 }

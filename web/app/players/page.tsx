@@ -49,10 +49,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Players</h1>
-          <p className="text-sm text-slate-400">{total.toLocaleString()} {sport.sport_name} athletes · {results.season} season · exhibitions excluded</p>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Players</h1>
         <SportTabs sports={sports} active={sport.sport_id} base="/players" />
       </div>
 
