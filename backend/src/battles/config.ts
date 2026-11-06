@@ -43,6 +43,10 @@ export const BATTLES = {
     k: 24,
   },
   ladder: {
+    /** Lowest to highest. */
+    divisions: ['WALK_ON', 'BENCH', 'STARTER', 'VARSITY', 'ALL_STAR', 'CAPTAIN', 'HALL_OF_FAME'] as const,
+    divisionNames: { WALK_ON: 'Walk-On', BENCH: 'Bench', STARTER: 'Starter', VARSITY: 'Varsity', ALL_STAR: 'All-Star',
+      CAPTAIN: 'Captain', HALL_OF_FAME: 'Hall of Fame' } as Record<string, string>,
     cohortSize: 30,
     promote: 5,
     relegate: 5,

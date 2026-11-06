@@ -11,16 +11,19 @@ import { passwordAuthRouter } from './password-auth.js';
 import { RealtimeHub } from './battles/realtime.js';
 import { battlesPublicRouter, battlesRouter } from './battles/routes.js';
 import { BattleService } from './battles/service.js';
+import { Matchmaking } from './battles/matchmaking.js';
 
 export interface AppDeps {
   hub: RealtimeHub;
   battles: BattleService;
+  matchmaking: Matchmaking;
 }
 
 /** Realtime hub + battle service; the server (index.ts) and tests build them explicitly. */
 export function createDeps(cfg: Config, db: Db, logger: Logger, opts: ConstructorParameters<typeof BattleService>[3] = {}): AppDeps {
   const hub = new RealtimeHub(logger, cfg.AUTH_DEV_HEADER);
-  return { hub, battles: new BattleService(db, hub, logger, opts) };
+  const battles = new BattleService(db, hub, logger, opts);
+  return { hub, battles, matchmaking: new Matchmaking(battles) };
 }
 
 /**
@@ -56,7 +59,7 @@ export function createApp(cfg: Config, db: Db, logger: Logger, isReady: () => bo
   app.use('/api/v1', passwordAuthRouter(cfg, db));
   app.use('/api/v1', publicRouter(db));
   app.use('/api/v1', battlesPublicRouter(db));
-  app.use('/api/v1', authenticate(cfg, db), apiRouter(db), battlesRouter(deps.battles));
+  app.use('/api/v1', authenticate(cfg, db), apiRouter(db), battlesRouter(deps.battles, deps.matchmaking));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

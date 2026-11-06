@@ -157,17 +157,29 @@ export class BattleService {
     }
   }
 
-  async activeBattle(q: Queryable, userId: string): Promise<string | undefined> {
+  /**
+   * The battle a user is busy with: drafting or simulating on either side, or
+   * a queued friend battle they sent (waiting for an answer). Invites a user
+   * RECEIVED don't make them busy.
+   */
+  async activeBattle(q: Queryable, userId: string, except?: string): Promise<string | undefined> {
     const { rows } = await q.query<{ id: string }>(
-      `SELECT id FROM battles WHERE (user_a = $1 OR user_b = $1) AND state = ANY($2) ORDER BY id DESC LIMIT 1`,
-      [userId, ACTIVE_STATES]);
+      `SELECT id FROM battles
+        WHERE ((state IN ('drafting', 'simulating') AND (user_a = $1 OR user_b = $1)) OR (state = 'queued' AND user_a = $1))
+          AND ($2::bigint IS NULL OR id <> $2)
+        ORDER BY id DESC LIMIT 1`, [userId, except ?? null]);
     return rows[0]?.id;
   }
 
-  async assertFree(q: Queryable, userId: string, who = 'You are') {
-    const busy = await this.activeBattle(q, userId);
+  /** Not in a battle (see activeBattle) and not waiting in the ranked queue. */
+  async assertFree(q: Queryable, userId: string, who = 'You are', opts: { except?: string; allowQueued?: boolean } = {}) {
+    const busy = await this.activeBattle(q, userId, opts.except);
     if (busy) {
       throw new HttpError(409, 'ALREADY_IN_BATTLE', `${who} already in a battle (bt_${busy})`, { battle_id: `bt_${busy}` });
+    }
+    if (!opts.allowQueued) {
+      const { rowCount } = await q.query('SELECT 1 FROM battle_queue WHERE user_id = $1', [userId]);
+      if (rowCount) throw new HttpError(409, 'ALREADY_QUEUED', `${who} waiting in the ranked queue`);
     }
   }
 
@@ -200,13 +212,18 @@ export class BattleService {
 
   async createTx(client: pg.PoolClient, outbox: Outbox, input: {
     mode: BattleMode; sportCode: string; userA: string; userB: string | null; state: 'queued' | 'drafting';
+    /** queue matches: both users are still in battle_queue while the battle is created */
+    fromQueue?: boolean;
   }): Promise<string> {
     await this.lockUsers(client, [input.userA, ...(input.userB ? [input.userB] : [])]);
-    await this.assertFree(client, input.userA);
-    if (input.userB) await this.assertFree(client, input.userB, 'Your opponent is');
+    await this.assertFree(client, input.userA, 'You are', { allowQueued: input.fromQueue });
+    // A friend invite (queued) only checks the friend when they accept.
+    if (input.userB && input.state === 'drafting') {
+      await this.assertFree(client, input.userB, 'Your opponent is', { allowQueued: input.fromQueue });
+    }
     await this.assertPool(client, input.sportCode);
     // Same T&C rule as leagues: terms accepted, and an athlete can't play their own sport.
-    for (const u of [input.userA, input.userB]) {
+    for (const u of [input.userA, input.state === 'drafting' ? input.userB : null]) {
       if (u) await client.query('SELECT assert_user_may_play_sport($1, (SELECT id FROM sports WHERE code = $2))', [u, input.sportCode]);
     }
     const { rows } = await client.query<{ id: string }>(
@@ -344,7 +361,7 @@ export class BattleService {
 
   async sideNames(q: Queryable, b: BattleRow): Promise<Record<Side, string>> {
     const { rows } = await q.query<{ id: string; name: string }>(
-      'SELECT id, display_name AS name FROM users WHERE id = ANY($1)', [[b.user_a, b.user_b].filter(Boolean)]);
+      'SELECT id, coalesce(username::text, display_name) AS name FROM users WHERE id = ANY($1)', [[b.user_a, b.user_b].filter(Boolean)]);
     const n = Object.fromEntries(rows.map((r) => [r.id, r.name]));
     const a = n[b.user_a] ?? 'Player A';
     let bb = b.user_b ? n[b.user_b] ?? 'Player B' : AI_NAME;
