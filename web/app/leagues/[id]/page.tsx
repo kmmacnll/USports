@@ -46,10 +46,6 @@ export default async function LeaguePage({ params, searchParams }: {
         <div>
           <div className="flex items-center gap-2"><SportBadge sport={league.sport} /><span className="text-xs text-slate-500">{league.season}</span></div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">{league.league_name}</h1>
-          <p className="text-sm text-slate-400">
-            {league.ruleset_name} · {league.team_count}/{league.max_teams} teams · {league.roster_size}-player rosters (
-            {Object.entries(league.roster_limits).map(([k, v]) => `${v} ${k}`).join(', ')})
-          </p>
         </div>
         {league.invite_code && (
           <div className="text-right text-xs text-slate-400">
@@ -62,12 +58,12 @@ export default async function LeaguePage({ params, searchParams }: {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card title={roster ? roster.team.team_name : 'Roster'} icon={<Swords className="size-4 text-accent" />}
-            action={roster && <span className="text-xs text-slate-500">{roster.filled}/{roster.roster_size} filled{editable ? '' : ' · view only'}</span>}>
+            action={roster && <span className="text-xs text-slate-500">{roster.filled}/{roster.roster_size}</span>}>
             {roster ? (
               <RosterGrid leagueId={league.league_id} slots={roster.slots} eligibility={league.position_eligibility}
                 editable={editable} columns={columns} />
             ) : (
-              <Empty>You don&apos;t have a team in this league. Join from the dashboard with league ID {league.league_id} and the invite code.</Empty>
+              <Empty>No team in this league</Empty>
             )}
           </Card>
           {editable && roster && (
@@ -78,9 +74,8 @@ export default async function LeaguePage({ params, searchParams }: {
           )}
         </div>
 
-        <Card title="Teams" icon={<Trophy className="size-4 text-accent" />} className="h-fit"
-          action={<span className="text-[11px] text-slate-500">season pts, current rosters</span>}>
-          {teams.length === 0 ? <Empty>No teams yet.</Empty> : (
+        <Card title="Teams" icon={<Trophy className="size-4 text-accent" />} className="h-fit">
+          {teams.length === 0 ? <Empty>No teams yet</Empty> : (
             <ol className="space-y-1">
               {teams.map((t, i) => (
                 <li key={t.team_id}>

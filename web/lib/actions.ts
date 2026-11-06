@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { api, ApiError } from './api';
-import { clearSession, devSignInEnabled, rememberName, setDevUser, setToken } from './session';
+import { clearSession, devSignInEnabled, setDevUser, setToken } from './session';
 import type { ActionResult, AthleteDetail, Athlete, League, Paginated, Roster } from './types';
 
 async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
@@ -18,25 +18,26 @@ async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
 
 // ---- session
 
-export async function signInWithPin(_: unknown, form: FormData): Promise<ActionResult> {
-  const name = String(form.get('name') ?? '').trim();
-  const pin = String(form.get('pin') ?? '').trim();
-  const result = await run(() => api<{ token: string }>('/auth/pin', { method: 'POST', auth: false, body: { name, pin } }));
+export async function signUp(_: unknown, form: FormData): Promise<ActionResult> {
+  const password = String(form.get('password') ?? '');
+  const confirmation = String(form.get('password_confirmation') ?? '');
+  if (password !== confirmation) return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Passwords do not match' } };
+  const result = await run(() => api<{ token: string }>('/auth/signup', {
+    method: 'POST', auth: false,
+    body: { email: String(form.get('email') ?? '').trim(), password, password_confirmation: confirmation },
+  }));
   if (!result.ok) return result;
   await setToken(result.data.token);
-  await rememberName(name);
   redirect('/');
 }
 
-export async function signInWithToken(_: unknown, form: FormData): Promise<ActionResult> {
-  const token = String(form.get('token') ?? '').trim();
-  if (!token) return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Paste a token' } };
-  await setToken(token);
-  const check = await run(() => api('/me'));
-  if (!check.ok) {
-    await clearSession();
-    return check;
-  }
+export async function signIn(_: unknown, form: FormData): Promise<ActionResult> {
+  const result = await run(() => api<{ token: string }>('/auth/login', {
+    method: 'POST', auth: false,
+    body: { email: String(form.get('email') ?? '').trim(), password: String(form.get('password') ?? '') },
+  }));
+  if (!result.ok) return result;
+  await setToken(result.data.token);
   redirect('/');
 }
 

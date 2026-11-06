@@ -50,10 +50,10 @@ export function AddPlayers({ leagueId, positions, columns, rosterFull }: {
         </select>
         <button className="btn-primary" disabled={pending}>{pending ? <LoaderCircle className="size-4 animate-spin" /> : 'Search'}</button>
       </form>
-      {rosterFull && <p className="text-xs text-amber-300">Your roster is full; drop a player to add another.</p>}
+      {rosterFull && <p className="text-xs text-amber-300">Roster full</p>}
       {error && <ErrorNote message={error} />}
       {results && (results.length === 0 ? (
-        <p className="text-sm text-slate-500">No available players match.</p>
+        <p className="text-sm text-slate-500">No players found</p>
       ) : (
         <ul className="divide-y divide-white/5">
           {results.map((a) => (

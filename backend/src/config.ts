@@ -14,9 +14,6 @@ const Env = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
-  // Shared access PIN for the web app's sign-in (POST /api/v1/auth/pin).
-  // Unset = PIN sign-in disabled. Needs JWT_SECRET to mint tokens.
-  ACCESS_PIN: z.string().regex(/^\d{4,12}$/, 'ACCESS_PIN must be 4-12 digits').optional(),
   AUTH_DEV_HEADER: z
     .enum(['true', 'false'])
     .default('false')
@@ -37,9 +34,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const cfg = parsed.data;
   if (cfg.NODE_ENV === 'production' && cfg.AUTH_DEV_HEADER) {
     throw new Error('AUTH_DEV_HEADER must not be enabled in production');
-  }
-  if (cfg.ACCESS_PIN && !cfg.JWT_SECRET) {
-    throw new Error('ACCESS_PIN needs JWT_SECRET (used to sign the tokens PIN sign-in issues)');
   }
   if (!cfg.JWT_SECRET && !cfg.JWT_JWKS_URL && !cfg.AUTH_DEV_HEADER) {
     throw new Error('Configure JWT_SECRET or JWT_JWKS_URL (or AUTH_DEV_HEADER=true for local development)');

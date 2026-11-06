@@ -52,13 +52,9 @@ services:
         fromDatabase:
           name: varsityhq-db
           property: connectionString
-      # Signs the API's own tokens (PIN sign-in, npm run token).
+      # Signs the API's own tokens (email sign-up/sign-in, npm run token).
       - key: JWT_SECRET
         generateValue: true
-      # Shared access PIN for the web app's sign-in page (4-12 digits). Set it
-      # in the dashboard, not here: this file is in Git. Blank = PIN sign-in off.
-      - key: ACCESS_PIN
-        sync: false
       # Real sign-in (e.g. Sign in with Apple); see the guide, step 8.
       - key: JWT_JWKS_URL
         sync: false

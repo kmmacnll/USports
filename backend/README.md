@@ -26,7 +26,8 @@ For safety, the test database name must contain "test".
 |---|---|---|---|
 | GET | `/sports` | – | Active sports with `season_type`, default `ruleset_id`, roster slots, position eligibility, scoring and stat columns. `?sport_id=usports_mhk` returns one sport (inactive ones included). Also `?season_type=FALL\|WINTER\|SPRING` and `?include_inactive=true` |
 | GET | `/athletes?sport_id=usports_mhk` | – | Search athletes with season stats. Filters: `university` (slug or id), `q` (name prefix), `position` (matches the slot's eligibility, e.g. hockey `F` = C/LW/RW), `conference`, `season`. Also `sort=fantasy_points\|name`, `page`, `page_size` (≤100). `sport` is accepted as an alias for `sport_id` |
-| POST | `/auth/pin` | – | `{ pin, name }` → a 30-day bearer token for the account `pin:<name>`. Enabled by `ACCESS_PIN`; wrong PINs are rate limited (5 per address and 50 overall per 15 min) |
+| POST | `/auth/signup` | – | `{ email, password, password_confirmation }` → creates the account (password hashed with scrypt in `users.password_hash`) and returns a 30-day bearer token. Passwords are 8-128 characters. 409 `EMAIL_TAKEN` if the email exists |
+| POST | `/auth/login` | – | `{ email, password }` → a 30-day bearer token. Failed attempts are rate limited (10 per address per 15 min). Both need `JWT_SECRET` |
 | GET | `/me` | ✓ | Profile, terms status, declared athlete sports, teams |
 | PUT | `/me/terms` | ✓ | Accept the current T&C and answer the U Sports athlete question |
 | POST | `/leagues` | ✓ | Create a league. Optional `ruleset_id` (defaults to the sport's default ruleset), `roster_limits` and `roster_size`. Optional `team_name` also creates the commissioner's team |

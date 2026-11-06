@@ -14,10 +14,6 @@ export function TermsForm({ version, sports }: { version: string; sports: Sport[
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="terms_version" value={version} />
-      <p className="text-sm text-slate-300">
-        Before joining a league, accept the Terms &amp; Conditions (version {version}). U Sports student-athletes can play
-        every sport <em>except their own</em>, so nobody can profit from their own performance.
-      </p>
       <fieldset className="space-y-2 text-sm">
         <legend className="label">Are you a current U Sports student-athlete?</legend>
         <label className="flex items-center gap-2"><input type="radio" name="is_usports_athlete" value="no" defaultChecked onChange={() => setAthlete(false)} /> No</label>
@@ -31,7 +27,6 @@ export function TermsForm({ version, sports }: { version: string; sports: Sport[
               <input type="checkbox" name="athlete_sports" value={s.sport_id} /> {s.sport_name}
             </label>
           ))}
-          <p className="text-xs text-amber-300">Declarations are permanent; you won&apos;t be able to join leagues in these sports.</p>
         </fieldset>
       )}
       {state && !state.ok && <ErrorNote message={state.error.message} />}

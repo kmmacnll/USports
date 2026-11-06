@@ -121,20 +121,17 @@ starting slots. Until then they can only go on the bench.
 > them (basketball's does), so football athletes keep stats-only records
 > until that's added.
 
-## 5c. Turn on PIN sign-in for the web app
+## 5c. Sign-up and sign-in
 
-1. Open **varsityhq-api → Environment** and add `ACCESS_PIN` with your PIN
-   (4-12 digits). Save; the API restarts.
-2. Open the web app and click **Sign in**. Enter your name and the PIN.
-   - Each name is its own account, with its own teams. Use the same name every time.
-   - The name is remembered on that device, so next time only the PIN is needed.
-   - Signing in lasts 30 days.
-3. Five wrong PINs from one address lock it out for 15 minutes. Fifty wrong
-   PINs from all addresses combined lock everyone out for 15 minutes.
+The web app has email + password accounts out of the box (it uses the
+generated `JWT_SECRET`). Click **Sign in → Create account**, enter an email
+and a password twice (8+ characters). Passwords are stored as scrypt hashes in
+`users.password_hash`. Signing in lasts 30 days; 10 failed sign-ins from one
+address lock it out for 15 minutes. To sign everyone out, regenerate
+`JWT_SECRET`.
 
-Anyone with the PIN can sign in under any name, so share it only with people
-you trust. To revoke access, change `ACCESS_PIN`. To also sign everyone out,
-regenerate `JWT_SECRET`.
+If you set `ACCESS_PIN` for the old PIN sign-in, delete it from
+**varsityhq-api → Environment**; it is no longer used.
 
 ## 6. Call the API with a test token
 

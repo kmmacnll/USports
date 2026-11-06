@@ -4,7 +4,6 @@ import { cookies } from 'next/headers';
 
 const TOKEN_COOKIE = 'vhq_token';
 const DEV_COOKIE = 'vhq_dev_user';
-const NAME_COOKIE = 'vhq_name';
 
 export const devSignInEnabled = () =>
   process.env.NODE_ENV !== 'production' && process.env.DEV_SIGN_IN === 'true';
@@ -43,13 +42,4 @@ export async function clearSession() {
   const jar = await cookies();
   jar.delete(TOKEN_COOKIE);
   jar.delete(DEV_COOKIE);
-}
-
-/** The name last used with PIN sign-in, to prefill the form on this device. */
-export async function getRememberedName(): Promise<string | undefined> {
-  return (await cookies()).get(NAME_COOKIE)?.value;
-}
-
-export async function rememberName(name: string) {
-  (await cookies()).set(NAME_COOKIE, name, { ...cookieOpts, maxAge: 60 * 60 * 24 * 365 });
 }

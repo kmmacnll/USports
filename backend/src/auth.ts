@@ -32,7 +32,7 @@ export function authenticate(cfg: Config, db: Db): RequestHandler {
 
   async function verify(token: string): Promise<JWTPayload> {
     try {
-      // HS256 tokens are minted by this API itself (PIN sign-in, npm run token)
+      // HS256 tokens are minted by this API itself (email sign-in, npm run token)
       // and are always checked against JWT_SECRET, even when an identity
       // provider (JWKS) is also configured.
       const alg = decodeProtectedHeader(token).alg;
