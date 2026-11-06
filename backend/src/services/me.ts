@@ -6,12 +6,15 @@ export async function getMe(db: Db, userId: string) {
   const { rows } = await db.query<{
     id: string; display_name: string; terms_version_accepted: string | null; terms_accepted_at: Date | null;
     is_usports_athlete: boolean | null; current_terms: string | null; athlete_sports: string[];
+    university_slug: string | null; university_name: string | null;
   }>(
     `SELECT u.id, u.display_name, u.terms_version_accepted, u.terms_accepted_at, u.is_usports_athlete,
             (SELECT version FROM terms_versions WHERE is_current) AS current_terms,
             coalesce(array(SELECT s.code FROM user_athlete_declarations d JOIN sports s ON s.id = d.sport_id
-                            WHERE d.user_id = u.id ORDER BY s.code), '{}') AS athlete_sports
-       FROM users u WHERE u.id = $1`,
+                            WHERE d.user_id = u.id ORDER BY s.code), '{}') AS athlete_sports,
+            un.slug AS university_slug, un.name AS university_name
+       FROM users u LEFT JOIN universities un ON un.id = u.university_id
+      WHERE u.id = $1`,
     [userId],
   );
   const u = rows[0];
@@ -26,6 +29,7 @@ export async function getMe(db: Db, userId: string) {
   return {
     user_id: encodeId('user', u.id),
     display_name: u.display_name,
+    university: u.university_slug ? { university_id: u.university_slug, name: u.university_name } : null,
     terms: {
       current_version: u.current_terms,
       accepted_version: u.terms_version_accepted,

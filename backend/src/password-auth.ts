@@ -11,7 +11,7 @@ import { HttpError } from './errors.js';
 /**
  * Email + password accounts, stored in users.password_hash (scrypt).
  *
- *   POST /api/v1/auth/signup { email, password, password_confirmation } -> 201 token
+ *   POST /api/v1/auth/signup { name, email, password, password_confirmation, university? } -> 201 token
  *   POST /api/v1/auth/login  { email, password }                        -> 200 token
  *
  * Tokens are 30-day HS256 JWTs signed with JWT_SECRET, for the subject
@@ -26,7 +26,10 @@ const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 
 const email = z.string().trim().toLowerCase().max(254).pipe(z.email('Enter a valid email address'));
 const SignupBody = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(40, 'Name must be at most 40 characters'),
   email,
+  // A university slug from GET /universities; blank or omitted = none.
+  university: z.string().trim().max(64).optional().transform((v) => v || undefined),
   password: z.string().min(8, 'Password must be at least 8 characters').max(128, 'Password must be at most 128 characters'),
   password_confirmation: z.string(),
 }).refine((b) => b.password === b.password_confirmation, { message: 'Passwords do not match', path: ['password_confirmation'] });
@@ -61,9 +64,6 @@ export async function verifyPassword(password: string, stored: string): Promise<
 // Checked against when the email is unknown, so both cases take as long.
 let dummyHash: Promise<string> | undefined;
 
-/** "kieran.macneill@example.com" -> "kieran.macneill" */
-export const nameFromEmail = (e: string) => e.split('@')[0]!.slice(0, 40) || 'Player';
-
 export function passwordAuthRouter(cfg: Config, db: Db, now: () => number = Date.now): Router {
   const r = Router();
   const failures = new Map<string, number[]>();
@@ -87,11 +87,19 @@ export function passwordAuthRouter(cfg: Config, db: Db, now: () => number = Date
     requireSecret();
     const body = parse(SignupBody, req.body);
     const subject = `local:${randomUUID()}`;
-    const displayName = nameFromEmail(body.email);
+    const displayName = body.name;
+    let universityId: string | null = null;
+    if (body.university) {
+      const { rows } = await db.query<{ id: string }>(
+        'SELECT id FROM universities WHERE slug = $1 AND is_usports_member', [body.university]);
+      if (!rows[0]) throw new HttpError(400, 'VALIDATION_ERROR', 'Unknown university');
+      universityId = rows[0].id;
+    }
     try {
       await db.query(
-        'INSERT INTO users (auth_subject, email, display_name, password_hash) VALUES ($1, $2, $3, $4)',
-        [subject, body.email, displayName, await hashPassword(body.password)],
+        `INSERT INTO users (auth_subject, email, display_name, password_hash, university_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [subject, body.email, displayName, await hashPassword(body.password), universityId],
       );
     } catch (err) {
       if ((err as { code?: string }).code === '23505') {

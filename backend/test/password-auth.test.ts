@@ -19,17 +19,17 @@ const appWith = (env: Record<string, string> = { JWT_SECRET: SECRET }) =>
   createApp(loadConfig({ NODE_ENV: 'test', DATABASE_URL: process.env.TEST_DATABASE_URL!, AUTH_DEV_HEADER: 'true', ...env }),
     db, pino({ level: 'silent' }));
 
-const signup = (app: express.Express, email: string, password = 'correct horse', confirm = password) =>
-  request(app).post('/api/v1/auth/signup').send({ email, password, password_confirmation: confirm });
+const signup = (app: express.Express, email: string, password = 'correct horse', confirm = password, extra: object = {}) =>
+  request(app).post('/api/v1/auth/signup').send({ name: 'Test Person', email, password, password_confirmation: confirm, ...extra });
 
 describe('email + password sign-up', () => {
   it('creates an account, stores a hash, and issues a working token', async () => {
     const app = appWith();
     const res = await signup(app, ' Kieran@Example.com ').expect(201);
-    expect(res.body).toMatchObject({ token_type: 'Bearer', email: 'kieran@example.com', display_name: 'kieran' });
+    expect(res.body).toMatchObject({ token_type: 'Bearer', email: 'kieran@example.com', display_name: 'Test Person' });
 
     const me = await request(app).get('/api/v1/me').set('Authorization', `Bearer ${res.body.token}`).expect(200);
-    expect(me.body.display_name).toBe('kieran');
+    expect(me.body).toMatchObject({ display_name: 'Test Person', university: null });
 
     const { rows } = await db.query<{ password_hash: string }>(
       "SELECT password_hash FROM users WHERE email = 'kieran@example.com'");
@@ -40,6 +40,21 @@ describe('email + password sign-up', () => {
       .send({ email: 'KIERAN@example.com', password: 'correct horse' }).expect(200);
     const me2 = await request(app).get('/api/v1/me').set('Authorization', `Bearer ${login.body.token}`).expect(200);
     expect(me2.body.user_id).toBe(me.body.user_id);
+  });
+
+  it('stores the chosen name and optional university', async () => {
+    const app = appWith();
+    const res = await signup(app, 'uni@example.com', 'password1', 'password1', { name: '  Sam Lee ', university: 'alpha' }).expect(201);
+    const me = await request(app).get('/api/v1/me').set('Authorization', `Bearer ${res.body.token}`).expect(200);
+    expect(me.body).toMatchObject({ display_name: 'Sam Lee', university: { university_id: 'alpha', name: 'Alpha U' } });
+
+    const blank = await signup(app, 'nouni@example.com', 'password1', 'password1', { university: '' }).expect(201);
+    expect((await request(app).get('/api/v1/me').set('Authorization', `Bearer ${blank.body.token}`)).body.university).toBeNull();
+
+    expect((await signup(app, 'bad@example.com', 'password1', 'password1', { university: 'nowhere' }).expect(400)).body.error.message)
+      .toBe('Unknown university');
+    expect((await signup(app, 'noname@example.com', 'password1', 'password1', { name: 'x' }).expect(400)).body.error.message)
+      .toMatch(/Name/);
   });
 
   it('rejects a duplicate email', async () => {
