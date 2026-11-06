@@ -190,6 +190,7 @@ def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
                     break
 
             scored = rescore(cur, sport, season)
+            db.refresh_season_stats(cur)
 
         summary = {
             "sport": sport_code, "season": season,

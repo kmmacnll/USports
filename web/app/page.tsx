@@ -5,18 +5,16 @@ import { CreateLeagueForm, JoinLeagueForm, TermsForm } from '@/components/dashbo
 import { PlayerPopover } from '@/components/player-popover';
 import { SportTabs } from '@/components/sport-tabs';
 import { Card, Empty, SportBadge, fmt } from '@/components/ui';
-import { api, apiOrNull } from '@/lib/api';
-import { getCredentials } from '@/lib/session';
+import { api, apiOrNull, getMe } from '@/lib/api';
 import type { Athlete, Game, League, LeagueTeam, Me, Paginated, Roster, Sport } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ sport?: string }> }) {
-  const [{ data: sports }, signedIn] = await Promise.all([
+  const [{ data: sports }, me] = await Promise.all([
     api<{ data: Sport[] }>('/sports', { auth: false, revalidate: 300 }),
-    getCredentials().then(Boolean),
+    getMe(),
   ]);
-  const me = signedIn ? await apiOrNull<Me>('/me') : null;
   const params = await searchParams;
   const activeSport = sports.find((s) => s.sport_id === params.sport)?.sport_id
     ?? me?.teams[0]?.sport ?? sports.find((s) => s.sport_id === 'usports_mbk')?.sport_id ?? sports[0]?.sport_id ?? '';
