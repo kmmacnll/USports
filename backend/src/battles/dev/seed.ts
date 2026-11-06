@@ -26,6 +26,16 @@ export async function wipeFakeData(db: Db | pg.PoolClient): Promise<void> {
   await db.query(`DELETE FROM universities WHERE slug LIKE 'dev-%'`);
 }
 
+/** Two local users for trying Play a Friend / Play Random with the X-Dev-User header. */
+export async function seedDevUsers(db: Db) {
+  await db.query(
+    `INSERT INTO users (auth_subject, display_name, username, terms_version_accepted, terms_accepted_at, is_usports_athlete)
+     SELECT v.sub, v.name, v.username, (SELECT version FROM terms_versions WHERE is_current), now(), FALSE
+       FROM (VALUES ('dev-alice', 'Alice (dev)', 'dev_alice'), ('dev-bob', 'Bob (dev)', 'dev_bob')) v(sub, name, username)
+     ON CONFLICT (auth_subject) DO UPDATE SET username = EXCLUDED.username,
+       terms_version_accepted = EXCLUDED.terms_version_accepted, terms_accepted_at = now()`);
+}
+
 export async function seedFakeData(db: Db, opts: FakeOptions = {}) {
   const data = generateFakeData(opts);
   const client = await db.connect();
@@ -95,6 +105,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     } else {
       const res = await seedFakeData(db, { teams: Number(arg('--teams') ?? 12), seed: Number(arg('--seed') ?? 20251) });
       console.log('✓ seeded', res);
+      await seedDevUsers(db);
+      console.log('✓ dev users: X-Dev-User: dev-alice (username dev_alice) and dev-bob (dev_bob), terms accepted');
     }
     console.log('→ recomputing ratings');
     console.log(JSON.stringify(await recomputeRatings(db, { force: true }), null, 2));

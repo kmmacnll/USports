@@ -6,6 +6,7 @@ import type { Db } from '../db.js';
 import { decodeId } from '../ids.js';
 import { HttpError } from '../errors.js';
 import { listPlayers, resolveSportCode } from './players.js';
+import type { Ladder } from './ladder.js';
 import type { Matchmaking } from './matchmaking.js';
 import type { BattleService } from './service.js';
 
@@ -60,8 +61,16 @@ const decodePrefixed = (prefix: string, kind: string) => (v: unknown): string =>
 const decodeInviteId = decodePrefixed('inv_', 'invite');
 const decodeNotificationId = decodePrefixed('ntf_', 'notification');
 
-export function battlesRouter(battles: BattleService, mm: Matchmaking): Router {
+export function battlesRouter(battles: BattleService, mm: Matchmaking, ladder: Ladder): Router {
   const r = Router();
+
+  // ---- Elo + divisions
+  r.get('/ladder/me', async (req, res) => {
+    res.json(await ladder.me(requireUser(req).id));
+  });
+  r.get('/me/stats', async (req, res) => {
+    res.json(await ladder.stats(requireUser(req).id));
+  });
 
   // ---- users & notifications
   r.put('/me/username', async (req, res) => {
