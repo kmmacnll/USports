@@ -93,7 +93,8 @@ def upsert_team_seasons(cur: psycopg.Cursor, sport: int, season: str, records, u
         VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (sport_id, season, university_id) DO UPDATE
            SET usports_team_id = EXCLUDED.usports_team_id, team_url = EXCLUDED.team_url
-         WHERE team_seasons.team_url IS DISTINCT FROM EXCLUDED.team_url
+         -- only fill a missing URL: the roster sync's teams-index URLs are more reliable
+         WHERE team_seasons.team_url IS NULL
         """,
         rows,
     )

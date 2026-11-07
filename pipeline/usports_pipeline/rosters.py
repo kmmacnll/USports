@@ -189,9 +189,15 @@ def discover_team_urls(cur: psycopg.Cursor, fetcher: "Fetcher", adapter: SportAd
              FROM universities u LEFT JOIN university_aliases a ON a.university_id = u.id
             WHERE u.is_usports_member GROUP BY u.id""")
     unis = [(r[0], r[1], r[2], list(r[3])) for r in cur.fetchall()]
-    cur.execute("SELECT university_id FROM team_seasons WHERE sport_id = %s AND season = %s AND team_url IS NOT NULL",
-                (sport, season))
-    known = {r[0] for r in cur.fetchall()}
+    # The box-score feed's team links are unreliable (live 2026-27 data gave
+    # one team id to up to three schools): a URL shared by several schools
+    # can't be right, so drop it. The teams index below is authoritative.
+    cur.execute(
+        """UPDATE team_seasons SET team_url = NULL
+            WHERE sport_id = %s AND season = %s AND team_url IN (
+                  SELECT team_url FROM team_seasons WHERE sport_id = %s AND season = %s AND team_url IS NOT NULL
+                   GROUP BY team_url HAVING count(*) > 1)""", (sport, season, sport, season))
+    dropped = cur.rowcount
     index = TEAMS_INDEX.format(path=adapter.usports_path, season=season)
     links = parse_team_links(fetcher.get(index), index)
     found, unmatched = {}, []
@@ -199,17 +205,34 @@ def discover_team_urls(cur: psycopg.Cursor, fetcher: "Fetcher", adapter: SportAd
         uid = match_university(name, url, unis)
         if uid is None:
             unmatched.append(name or url)
-        elif uid not in known and uid not in found:
+        elif uid not in found:
             found[uid] = url
     cur.executemany(
         """INSERT INTO team_seasons (university_id, sport_id, season, team_url) VALUES (%s, %s, %s, %s)
-           ON CONFLICT (sport_id, season, university_id) DO UPDATE SET team_url = EXCLUDED.team_url
-            WHERE team_seasons.team_url IS NULL""",
+           ON CONFLICT (sport_id, season, university_id) DO UPDATE SET team_url = EXCLUDED.team_url""",
         [(uid, sport, season, url) for uid, url in found.items()])
     if unmatched:
         log.info("teams index %s: %d link(s) not matched to a member university: %s",
                  index, len(unmatched), ", ".join(unmatched[:10]))
-    return {"index_links": len(links), "discovered": len(found), "unmatched": len(unmatched)}
+    return {"index_links": len(links), "discovered": len(found), "unmatched": len(unmatched), "feed_links_dropped": dropped}
+
+
+def describe_page(html: str) -> str:
+    """One line on what a page actually contains, for the log when parsing finds nothing."""
+    soup = BeautifulSoup(html, "html.parser")
+    title = _clean(soup.title.get_text()) if soup.title else ""
+    tables = soup.find_all("table")
+    heads = []
+    for t in tables[:4]:
+        row = (t.find("thead") or t).find("tr")
+        cells = [_clean(c.get_text(" "))[:15] for c in row.find_all(["th", "td"])][:8] if row else []
+        heads.append("|".join(cells))
+    scripts = len(soup.find_all("script"))
+    text = _clean(soup.get_text(" "))
+    return (f"{len(html) // 1024} KB, title {title[:60]!r}, {len(tables)} table(s)"
+            + (f" headers {heads}" if heads else "")
+            + f", {scripts} script tag(s), {len(text)} chars of text, mentions 'roster' {text.lower().count('roster')}x"
+            + (", looks client-rendered" if len(text) < 2000 and scripts > 5 else ""))
 
 
 def roster_url(team_url: str) -> str:
@@ -311,7 +334,8 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
             summary["teams"] += 1
             url = roster_url(team_url)
             try:
-                entries = parse_roster_html(fetcher.get(url), url)
+                html = fetcher.get(url)
+                entries = parse_roster_html(html, url)
             except Exception as e:  # one bad page must not abort the run
                 summary["teams_failed"] += 1
                 errors[_reason(e)] = errors.get(_reason(e), 0) + 1
@@ -320,7 +344,8 @@ def sync_rosters(sport_code: str, season: str | None = None, *,
             if not entries:
                 summary["teams_no_table"] += 1
                 errors["no roster table on page"] = errors.get("no roster table on page", 0) + 1
-                log.warning("no roster table found for %s at %s (try --render)", uni_name, url)
+                log.warning("no roster table found for %s at %s (try --render) — page: %s", uni_name, url,
+                            describe_page(html))
                 continue
             with conn.transaction(), conn.cursor() as cur:
                 new, updated = _upsert_roster(cur, sport, uid, entries, adapter)
