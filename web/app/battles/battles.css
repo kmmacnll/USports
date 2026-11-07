@@ -1,0 +1,95 @@
+/* Draft Battles design tokens and surfaces (from the "Draft Battles" Claude Design handoff).
+   Scoped under .vb so the rest of the app keeps its existing teal theme. */
+.vb {
+  --vb-bg-900: #070B15;
+  --vb-bg-800: #0C1628;
+  --vb-surface: #111A2A;
+  --vb-surface-2: #18233A;
+  --vb-navy: #1B3157;
+  --vb-navy-500: #2F5596;
+  --vb-primary: #D93A40;
+  --vb-primary-text: #F2666B;
+  --vb-blue: #8EB1F5;
+  --vb-live: #FF8A3D;
+  --vb-gold: #E9B949;
+  --vb-win: #3DD68C;
+  --vb-loss: #FF6B7A;
+  --vb-text: #F2F4F8;
+  --vb-text-2: #C3CBDA;
+  --vb-text-3: #93A0B8;
+  --vb-text-4: #8390A8;
+  --vb-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --vb-body: Manrope, system-ui, sans-serif;
+
+  font-family: var(--vb-body);
+  color: var(--vb-text);
+  -webkit-font-smoothing: antialiased;
+}
+:where(.vb) *, :where(.vb) *::before, :where(.vb) *::after { box-sizing: border-box; }
+/* Resets use :where() (zero specificity) so the .vb-btn-* and .vb-display classes win. */
+:where(.vb) :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+:where(.vb) :where(button:disabled) { cursor: not-allowed; }
+:where(.vb) :where(input)::placeholder { color: var(--vb-text-4); }
+.vb :focus-visible { outline: 2px solid var(--vb-blue); outline-offset: 2px; }
+.vb .no-scrollbar { scrollbar-width: none; }
+.vb .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Screen backdrop */
+.vb-screen {
+  background:
+    repeating-linear-gradient(135deg, rgba(142,177,245,.045) 0 1px, transparent 1px 22px),
+    radial-gradient(110% 55% at 100% 0%, rgba(38,70,128,.6), transparent 62%),
+    radial-gradient(90% 45% at 0% 100%, rgba(217,58,64,.16), transparent 60%),
+    linear-gradient(170deg, #0C1628, #070B15);
+}
+
+/* Glowing tiles */
+.vb-tile { border-radius: 20px; border: 1px solid rgba(142,177,245,.22); background: linear-gradient(160deg, rgba(38,62,110,.72), rgba(13,21,38,.9) 70%); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 0 28px rgba(142,177,245,.10), 0 12px 28px rgba(0,0,0,.35); }
+.vb-tile-primary { border-radius: 20px; border: 1px solid rgba(229,72,77,.5); background: linear-gradient(160deg, rgba(130,32,44,.6), rgba(13,21,38,.92) 72%); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 0 32px rgba(217,58,64,.22), 0 0 26px rgba(217,58,64,.18), 0 12px 28px rgba(0,0,0,.35); }
+.vb-tile-blue { border-radius: 20px; border: 1px solid rgba(142,177,245,.45); background: linear-gradient(160deg, rgba(47,85,150,.75), rgba(13,21,38,.92) 72%); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 32px rgba(142,177,245,.2), 0 0 26px rgba(142,177,245,.16), 0 12px 28px rgba(0,0,0,.35); }
+.vb-tile-live { border-radius: 20px; border: 1px solid rgba(255,138,61,.5); background: linear-gradient(160deg, rgba(130,60,20,.5), rgba(13,21,38,.92) 72%); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 0 30px rgba(255,138,61,.2), 0 0 22px rgba(255,138,61,.14), 0 12px 28px rgba(0,0,0,.35); }
+.vb-tile-gold { border-radius: 20px; border: 1px solid rgba(233,185,73,.45); background: linear-gradient(160deg, rgba(120,90,30,.5), rgba(13,21,38,.92) 72%); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 0 30px rgba(233,185,73,.18), 0 0 22px rgba(233,185,73,.12), 0 12px 28px rgba(0,0,0,.35); }
+.vb-press { transition: transform .12s ease; }
+.vb-press:active:not(:disabled) { transform: scale(.985); }
+
+/* Buttons */
+.vb-btn { display: grid; place-items: center; font-weight: 800; border-radius: 16px; }
+.vb-btn-primary { background: linear-gradient(180deg, #E5484D, #C8323A); color: #FFFFFF; box-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 0 0 1px rgba(255,255,255,.1), 0 10px 28px rgba(217,58,64,.42); }
+.vb-btn-secondary { background: linear-gradient(180deg, rgba(47,85,150,.6), rgba(27,49,87,.6)); color: var(--vb-text); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 0 1px rgba(142,177,245,.32); }
+.vb-btn-ghost { background: transparent; color: var(--vb-text-2); box-shadow: inset 0 0 0 1px rgba(142,177,245,.3); }
+.vb-btn-disabled { background: rgba(142,177,245,.08); color: var(--vb-text-4); }
+
+/* Type helpers */
+.vb-display { font-family: var(--vb-display); font-style: italic; font-weight: 900; }
+.vb-num { font-family: var(--vb-display); font-weight: 700; font-variant-numeric: tabular-nums; }
+.vb-label { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--vb-text-3); }
+.vb-icon { font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal; line-height: 1; letter-spacing: normal; text-transform: none; white-space: nowrap; direction: ltr; font-feature-settings: 'liga'; -webkit-font-feature-settings: 'liga'; display: inline-block; user-select: none; }
+.vb-icon-fill { font-variation-settings: 'FILL' 1; }
+
+@keyframes vslide { from { opacity: 0; transform: translateY(-16px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes vflyA { 0% { opacity: .2; transform: translateY(170px) scale(1.7) rotate(-6deg) } 70% { opacity: 1; transform: translateY(-6px) scale(.96) } 100% { transform: none } }
+@keyframes vflyB { 0% { opacity: .2; transform: translateY(-170px) scale(1.7) rotate(6deg) } 70% { opacity: 1; transform: translateY(6px) scale(.96) } 100% { transform: none } }
+@keyframes vring { 0% { transform: scale(.35); opacity: .7 } 100% { transform: scale(1.5); opacity: 0 } }
+@keyframes vspin { to { transform: rotate(360deg) } }
+@keyframes vblip { 0%, 100% { opacity: 0; transform: scale(.4) } 20%, 60% { opacity: 1; transform: scale(1) } }
+@keyframes vslamL { 0% { transform: translateX(-110%) skewX(-12deg) } 70% { transform: translateX(4%) skewX(-12deg) } 100% { transform: translateX(0) skewX(-12deg) } }
+@keyframes vslamR { 0% { transform: translateX(110%) skewX(-12deg) } 70% { transform: translateX(-4%) skewX(-12deg) } 100% { transform: translateX(0) skewX(-12deg) } }
+@keyframes vvs { 0% { opacity: 0; transform: scale(3.2) rotate(-8deg) } 55% { opacity: 0; transform: scale(3.2) rotate(-8deg) } 80% { opacity: 1; transform: scale(.9) rotate(-8deg) } 100% { opacity: 1; transform: scale(1) rotate(-8deg) } }
+@keyframes vot { 0% { opacity: 0; transform: scale(1.4) } 14% { opacity: 1; transform: scale(1) } 82% { opacity: 1; transform: scale(1) } 100% { opacity: 0; transform: scale(.96) } }
+@keyframes vbanner { from { transform: translateY(-130%) } to { transform: none } }
+@keyframes vflash { 0% { transform: scale(1.45); color: #E9B949; text-shadow: 0 0 24px rgba(233,185,73,.8) } 100% { transform: scale(1) } }
+@keyframes vflash2 { 0% { transform: scale(1.45); color: #E9B949; text-shadow: 0 0 24px rgba(233,185,73,.8) } 100% { transform: scale(1) } }
+@keyframes vglow { 0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 10px 28px rgba(217,58,64,.42), 0 0 0 0 rgba(217,58,64,.45) } 50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 10px 34px rgba(217,58,64,.6), 0 0 0 8px rgba(217,58,64,0) } }
+@keyframes vup { from { opacity: 0; transform: translateY(24px) } to { opacity: 1; transform: none } }
+@keyframes velo { from { transform: translateY(0) } to { transform: translateY(-24px) } }
+@keyframes vpop { from { opacity: 0; transform: scale(2) } to { opacity: 1; transform: scale(1) } }
+@keyframes vringdash { from { stroke-dashoffset: 0 } to { stroke-dashoffset: 339.3 } }
+@keyframes vfade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes vpulse { 0% { box-shadow: 0 0 0 0 rgba(255,138,61,.6) } 100% { box-shadow: 0 0 0 7px rgba(255,138,61,0) } }
+@keyframes vshim { 0% { background-position: -200px 0 } 100% { background-position: 200px 0 } }
+
+.vb-shimmer { background: linear-gradient(90deg, #111A2A 0, #1D2A44 50%, #111A2A 100%); background-size: 400px 100%; animation: vshim 1.4s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vb *, .vb *::before, .vb *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
