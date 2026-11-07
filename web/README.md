@@ -1,9 +1,13 @@
 # `web/` — VarsityHQ web app
 
 Next.js 16 (App Router), TypeScript, Tailwind CSS 4 and lucide-react. The
-design is dark-first: `slate-900` background, electric teal accent (`#06B6D4`,
-the `accent` colour token) and frosted-glass cards (`glass` utility, using
-`backdrop-blur-md`).
+whole app uses the Draft Battles theme from the Claude Design handoffs: navy
+background with diagonal stripes, red primary (`#D93A40`), glowing tiles
+(`tile`, `tile-primary`, `tile-blue`, `tile-live`, `tile-gold` utilities),
+Manrope for text and italic Barlow Condensed for headings and numbers. The
+tokens live in `app/globals.css`. It is mobile-first: phones get a bottom tab
+bar (Home, League, Players, Scores, Battles), larger screens get the links in
+the header, and player cards and the create/join forms open as bottom sheets.
 
 ```bash
 cd web
@@ -17,13 +21,13 @@ npm run build && npm start      # production
 
 | Route | What |
 |---|---|
-| `/` | Dashboard: your leagues (rank, roster points, fill), create and join a league, terms acceptance, real U Sports games (last 3 days and next 4, with your rostered players' teams marked), and the top performers by FP/G |
-| `/leagues/[id]` | League header and invite code; roster grid split into Starters and Bench. Drag a player onto a slot, or tap a player and then a highlighted slot; occupied slots swap. Also: player stat popovers, drop, a free-agent search to add players, and a teams list (click a team to view its roster) |
-| `/players` | Player directory: search, then filter by university, conference and position; sort; paginate; click a name for the stat popover. The URL holds all filters, so views can be shared |
+| `/` | Home. Signed out: the welcome hero. Signed in: first-run eligibility + terms, your first league as the featured card (rank, roster points, roster fill), My leagues, a Draft Battles shortcut, top performers by FP/G and this week's scores for the chosen sport (your rostered players' teams marked). The "+" and "Join with code" buttons open the create/join sheet |
+| `/leagues/[id]` | League header and invite (copy league ID and code), then Roster / Standings / Add players. Roster: tap a player, then a highlighted slot, to swap (or drag on desktop); the selection bar offers the player card and Drop. Standings: teams by roster points; tap one to view its roster. Add players: free agents, loaded straight away, with search and position chips |
+| `/players` | Player directory: sport chips, search, university/conference filters, sort, position chips, paginate; tap a row for the player card. The URL holds all filters, so views can be shared |
+| `/scores` | Scores by sport and day (from 3 days back to 4 ahead), grouped Live / Upcoming / Final, with your rostered players' teams marked |
 | `/login` | Email + password sign-in. In local dev, also "continue as" any name |
 | `/signup` | Create an account: name, email, optional university, password, confirm password |
-| `/battles` | Draft Battles (mobile-first, its own navy/red theme): home pager, lobby, play a friend, inbox, ranked ladder, matchmaking, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. **Demo only:** fictional Women's Hockey athletes and users, no backend yet. See `components/battles/` |
-| `/mobile` | VarsityHQ phone app (mobile-first, navy/red theme): onboarding with athlete eligibility, Home (live matchup card, my leagues, top performers), League (live matchup with a play-by-play feed, standings, roster with tap-to-swap lineup), Players (search, position filter, add/drop), Scores, player card and create/join sheets, and a snake draft room. **Demo only:** fictional athletes and teams, no backend yet. See `components/mobile/` |
+| `/battles` | Draft Battles (full-screen, mobile-first): home pager, lobby, play a friend, inbox, ranked ladder, matchmaking, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. **Demo only:** fictional Women's Hockey athletes and users, no backend yet. See `components/battles/` |
 
 ## How it talks to the API
 
@@ -46,8 +50,10 @@ npm run build && npm start      # production
 - Season stats and FP/G exclude exhibition games.
 - The conference filter stays disabled ("Not available yet") until
   `universities.conference` is populated; no data source fills it yet.
-- Fantasy head-to-head matchups don't exist in the backend yet, so the
-  dashboard shows real U Sports games instead of fantasy matchups.
+- Fantasy head-to-head matchups don't exist in the backend yet, so Home
+  features your league standing and real U Sports games instead, and the
+  league page says matchups are coming. The prototype's draft room isn't
+  built either: leagues have no draft yet (players are added as free agents).
 
 ## Draft Battles (`/battles`)
 
@@ -68,21 +74,3 @@ doesn't touch the rest of the app's teal theme.
   than hockey (the lobby shows them as "coming soon").
 
 
-## VarsityHQ phone app (`/mobile`)
-
-Built from the "VarsityHQ App" Claude Design handoff (an iOS prototype). The
-phone frame, status bar and the prototype's "jump to" list are not part of the
-build; the screens are deep-linkable instead (`/mobile#onboarding`, `#matchup`,
-`#standings`, `#roster`, `#players`, `#scores`, `#draft`), and browser back works.
-Everything lives in `components/mobile/` and `app/mobile/`, scoped under the
-`.vhq` class.
-
-- `data.ts`: the fictional football pool (OUA Diehards), today's game states,
-  the basketball draft pool (Snow Bowl Hoops), scores, sports and slot rules.
-  `elig()` mirrors the API's slot eligibility (FLEX takes RB/WR, bench takes anyone).
-- `store.tsx`: one state object plus actions (swap, add, drop, draft pick), the
-  live-scoring ticker (a random play every 2.4 s for a starter whose game is
-  live) and the draft clock (other teams pick each second; your 30 s clock
-  auto-picks your top queued player, else the best available).
-- Not built yet: wiring to the real API (leagues, rosters, players, games),
-  fantasy matchups (no backend endpoint), trades, and the Frozen Four league.

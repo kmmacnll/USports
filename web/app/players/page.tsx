@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 import { PlayerPopover } from '@/components/player-popover';
 import { SportTabs } from '@/components/sport-tabs';
-import { Empty, fmt } from '@/components/ui';
+import { Empty, PageTitle, UniMark, chipClass, fmt } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { Athlete, Paginated, Sport, University } from '@/lib/types';
 
@@ -45,101 +45,95 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     for (const [k, v] of Object.entries({ ...keep, ...over })) if (v !== undefined && v !== '') q.set(k, String(v));
     return `/players?${q}`;
   };
+  const seasonCols = sport.stat_columns.season.slice(0, 3);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">Players</h1>
-        <SportTabs sports={sports} active={sport.sport_id} base="/players" />
-      </div>
+    <div className="mx-auto max-w-3xl space-y-4">
+      <PageTitle sub={`${sport.sport_name} · ${total.toLocaleString('en-CA')} players`}>Players</PageTitle>
+      <SportTabs sports={sports} active={sport.sport_id} base="/players" />
 
-      <form method="get" className="glass grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
+      <form method="get" className="space-y-2.5">
         <input type="hidden" name="sport" value={sport.sport_id} />
-        <div className="lg:col-span-2">
-          <label className="label" htmlFor="q">Search</label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-slate-500" />
-            <input id="q" name="q" defaultValue={p.q} className="input pl-9" placeholder="Player name" />
-          </div>
-        </div>
-        <div>
-          <label className="label" htmlFor="university">University</label>
-          <select id="university" name="university" defaultValue={p.university ?? ''} className="input">
+        {p.position && <input type="hidden" name="position" value={p.position} />}
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3.5 top-3.5 size-5 text-ink-4" />
+          <input type="search" name="q" defaultValue={p.q} className="input pl-11" placeholder="Search name" aria-label="Search players" />
+        </label>
+        <div className={`grid grid-cols-2 gap-2 ${conferences.length ? 'sm:grid-cols-[1fr_1fr_auto_auto]' : 'sm:grid-cols-[1fr_auto_auto]'}`}>
+          <select name="university" defaultValue={p.university ?? ''} className="input h-11 text-sm" aria-label="University">
             <option value="">All universities</option>
             {universities.map((u) => <option key={u.university_id} value={u.university_id}>{u.name}</option>)}
           </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="conference">Conference</label>
-          <select id="conference" name="conference" defaultValue={p.conference ?? ''} className="input"
-            disabled={conferences.length === 0} title={conferences.length ? undefined : 'Conference data has not been loaded yet'}>
-            <option value="">{conferences.length ? 'All conferences' : 'Not available yet'}</option>
-            {conferences.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-        <div className={positions.length ? '' : 'hidden'}>
-          <label className="label" htmlFor="position">Position</label>
-          <select id="position" name="position" defaultValue={p.position ?? ''} className="input">
-            <option value="">Any</option>
-            {positions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
-          </select>
-        </div>
-        <div className="flex items-end gap-2">
-          <select name="sort" defaultValue={sort} className="input" aria-label="Sort">
+          {conferences.length > 0 && (
+            <select name="conference" defaultValue={p.conference ?? ''} className="input h-11 text-sm" aria-label="Conference">
+              <option value="">All conferences</option>
+              {conferences.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+          <select name="sort" defaultValue={sort} className="input h-11 text-sm sm:w-auto" aria-label="Sort">
             <option value="fantasy_points">Top FP/G</option>
             <option value="name">Name</option>
           </select>
-          <button className="btn-primary shrink-0">Apply</button>
+          <button className={`btn-primary h-11 ${conferences.length ? '' : 'col-span-2 sm:col-span-1'}`}>Apply</button>
         </div>
       </form>
 
+      {positions.length > 1 && (
+        <nav aria-label="Position" className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          {['', ...positions].map((pos) => (
+            <Link key={pos || 'all'} href={href({ position: pos || undefined, page: undefined })} scroll={false}
+              aria-current={(p.position ?? '') === pos ? 'page' : undefined} className={chipClass((p.position ?? '') === pos)}>
+              {pos || 'All'}
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      <div className="flex items-center justify-between px-1 pt-1 text-[10px] font-extrabold tracking-[.08em] text-ink-4">
+        <span>{sort === 'name' ? 'A–Z' : 'BY FANTASY POINTS'}</span><span>FP/G · GP</span>
+      </div>
       {results.data.length === 0 ? (
-        <Empty>No athletes match these filters.</Empty>
+        <div className="tile"><Empty>No athletes match these filters.</Empty></div>
       ) : (
-        <div className="glass overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead className="border-b border-white/10 text-left text-[11px] uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">Player</th>
-                <th className="px-3 py-3 font-medium">University</th>
-                <th className="px-3 py-3 font-medium">Conf</th>
-                <th className="px-3 py-3 font-medium">Pos</th>
-                <th className="px-3 py-3 text-right font-medium">GP</th>
-                {sport.stat_columns.season.map((c) => <th key={c.key} className="px-3 py-3 text-right font-medium">{c.label}</th>)}
-                <th className="px-4 py-3 text-right font-medium text-accent">FP/G</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.data.map((a) => (
-                <tr key={a.athlete_id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03]">
-                  <td className="px-4 py-2.5">
-                    <PlayerPopover athleteId={a.athlete_id} columns={sport.stat_columns}>
-                      <span className="font-medium">{a.first_name} {a.last_name}</span>
-                    </PlayerPopover>
-                    {a.jersey_number && <span className="ml-1.5 text-xs text-slate-500">#{a.jersey_number}</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-slate-300">{a.university}</td>
-                  <td className="px-3 py-2.5 text-slate-400">{a.conference ?? '—'}</td>
-                  <td className="px-3 py-2.5">{a.positions.length ? a.positions.map((x) => <span key={x} className="chip mr-1">{x}</span>) : <span className="text-slate-500">—</span>}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{a.stats.games_played}</td>
-                  {sport.stat_columns.season.map((c) => <td key={c.key} className="px-3 py-2.5 text-right tabular-nums text-slate-300">{fmt(a.stats[c.key])}</td>)}
-                  <td className="px-4 py-2.5 text-right font-bold tabular-nums text-accent">{fmt(a.stats.fantasy_points_avg)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="tile rows overflow-hidden">
+          {results.data.map((a, i) => (
+            <PlayerPopover key={a.athlete_id} athleteId={a.athlete_id} columns={sport.stat_columns} className="w-full">
+              <span className="flex min-h-[64px] items-center gap-3 px-4 py-2.5 transition hover:bg-white/[.03]">
+                {sort !== 'name' && <span className="num hidden w-6 text-right text-[15px] text-ink-4 sm:block">{(page - 1) * PAGE_SIZE + i + 1}</span>}
+                <UniMark name={a.university} id={a.university_id} size={38} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-bold text-ink">
+                    {a.first_name} {a.last_name}{a.jersey_number && <span className="ml-1.5 text-xs font-semibold text-ink-4">#{a.jersey_number}</span>}
+                  </span>
+                  <span className="block truncate text-xs font-semibold text-ink-3">
+                    {[a.positions.join('/') || null, a.university, a.conference].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
+                <span className="hidden gap-4 sm:flex">
+                  {seasonCols.map((c) => (
+                    <span key={c.key} className="flex w-11 flex-col items-end leading-none">
+                      <span className="num text-[16px] text-ink-2">{fmt(a.stats[c.key])}</span>
+                      <span className="mt-1 text-[9.5px] font-extrabold text-ink-4">{c.label}</span>
+                    </span>
+                  ))}
+                </span>
+                <span className="flex w-12 flex-col items-end leading-none">
+                  <span className="num text-[22px] text-blue">{fmt(a.stats.fantasy_points_avg)}</span>
+                  <span className="mt-1 text-[10px] font-bold text-ink-4">{a.stats.games_played} GP</span>
+                </span>
+              </span>
+            </PlayerPopover>
+          ))}
         </div>
       )}
 
       {pages > 1 && (
-        <nav className="flex items-center justify-between text-sm" aria-label="Pagination">
-          <span className="text-slate-400">Page {page} of {pages}</span>
-          <div className="flex gap-2">
-            {page > 1 ? <Link href={href({ page: page - 1 })} className="btn-ghost"><ChevronLeft className="size-4" /> Prev</Link>
-              : <span className="btn-ghost opacity-40"><ChevronLeft className="size-4" /> Prev</span>}
-            {page < pages ? <Link href={href({ page: page + 1 })} className="btn-ghost">Next <ChevronRight className="size-4" /></Link>
-              : <span className="btn-ghost opacity-40">Next <ChevronRight className="size-4" /></span>}
-          </div>
+        <nav className="flex items-center justify-between gap-3 pt-1" aria-label="Pagination">
+          {page > 1 ? <Link href={href({ page: page - 1 })} className="btn-secondary h-10"><ChevronLeft className="size-4" /> Prev</Link>
+            : <span className="btn-ghost h-10 opacity-40"><ChevronLeft className="size-4" /> Prev</span>}
+          <span className="text-[13px] font-bold text-ink-3">Page {page} of {pages}</span>
+          {page < pages ? <Link href={href({ page: page + 1 })} className="btn-secondary h-10">Next <ChevronRight className="size-4" /></Link>
+            : <span className="btn-ghost h-10 opacity-40">Next <ChevronRight className="size-4" /></span>}
         </nav>
       )}
     </div>
