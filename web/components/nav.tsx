@@ -1,4 +1,4 @@
-import { LayoutDashboard, LogIn, LogOut, Search, Shield, Swords } from 'lucide-react';
+import { LayoutDashboard, LogIn, LogOut, Search, Shield, Smartphone, Swords } from 'lucide-react';
 import Link from 'next/link';
 
 import { getMe } from '@/lib/api';
@@ -24,6 +24,9 @@ export async function Nav() {
           </Link>
           <Link href="/battles" className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-slate-300 hover:bg-white/5 hover:text-white">
             <Swords className="size-4" /> <span className="hidden sm:inline">Battles</span>
+          </Link>
+          <Link href="/mobile" className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-slate-300 hover:bg-white/5 hover:text-white">
+            <Smartphone className="size-4" /> <span className="hidden sm:inline">App</span>
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">

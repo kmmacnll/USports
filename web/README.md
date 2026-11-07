@@ -23,6 +23,7 @@ npm run build && npm start      # production
 | `/login` | Email + password sign-in. In local dev, also "continue as" any name |
 | `/signup` | Create an account: name, email, optional university, password, confirm password |
 | `/battles` | Draft Battles (mobile-first, its own navy/red theme): home pager, lobby, play a friend, inbox, ranked ladder, matchmaking, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. **Demo only:** fictional Women's Hockey athletes and users, no backend yet. See `components/battles/` |
+| `/mobile` | VarsityHQ phone app (mobile-first, navy/red theme): onboarding with athlete eligibility, Home (live matchup card, my leagues, top performers), League (live matchup with a play-by-play feed, standings, roster with tap-to-swap lineup), Players (search, position filter, add/drop), Scores, player card and create/join sheets, and a snake draft room. **Demo only:** fictional athletes and teams, no backend yet. See `components/mobile/` |
 
 ## How it talks to the API
 
@@ -66,3 +67,22 @@ doesn't touch the rest of the app's teal theme.
   endpoints exist), real U Sports athletes in the draft pool, and sports other
   than hockey (the lobby shows them as "coming soon").
 
+
+## VarsityHQ phone app (`/mobile`)
+
+Built from the "VarsityHQ App" Claude Design handoff (an iOS prototype). The
+phone frame, status bar and the prototype's "jump to" list are not part of the
+build; the screens are deep-linkable instead (`/mobile#onboarding`, `#matchup`,
+`#standings`, `#roster`, `#players`, `#scores`, `#draft`), and browser back works.
+Everything lives in `components/mobile/` and `app/mobile/`, scoped under the
+`.vhq` class.
+
+- `data.ts`: the fictional football pool (OUA Diehards), today's game states,
+  the basketball draft pool (Snow Bowl Hoops), scores, sports and slot rules.
+  `elig()` mirrors the API's slot eligibility (FLEX takes RB/WR, bench takes anyone).
+- `store.tsx`: one state object plus actions (swap, add, drop, draft pick), the
+  live-scoring ticker (a random play every 2.4 s for a starter whose game is
+  live) and the draft clock (other teams pick each second; your 30 s clock
+  auto-picks your top queued player, else the best available).
+- Not built yet: wiring to the real API (leagues, rosters, players, games),
+  fantasy matchups (no backend endpoint), trades, and the Frozen Four league.
