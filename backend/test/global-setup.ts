@@ -39,4 +39,25 @@ export async function setup() {
   await fixtures.end();
 
   process.env.TEST_DATABASE_URL = url.toString();
+
+  // Draft Battles tests use their own database, filled with fake players for
+  // every sport (src/battles/dev), so they can't disturb the fixture counts above.
+  const battles = new URL(url);
+  battles.pathname = `/${dbName.replace('test', 'battles_test')}`;
+  const admin2 = new pg.Client({ connectionString: admin.toString() });
+  await admin2.connect();
+  await admin2.query(`DROP DATABASE IF EXISTS "${battles.pathname.slice(1)}" WITH (FORCE)`);
+  await admin2.query(`CREATE DATABASE "${battles.pathname.slice(1)}"`);
+  await admin2.end();
+  const env2 = { ...process.env, DATABASE_URL: battles.toString() };
+  execFileSync(migrate, ['up'], { env: env2, stdio: 'pipe' });
+  execFileSync(migrate, ['seed'], { env: env2, stdio: 'pipe' });
+  const { createPool } = await import('../src/db.js');
+  const { seedFakeData } = await import('../src/battles/dev/seed.js');
+  const { recomputeRatings } = await import('../src/battles/ratings/job.js');
+  const pool = createPool(battles.toString(), 2);
+  await seedFakeData(pool, { teams: 10, seed: 4242 });
+  await recomputeRatings(pool, { force: true });
+  await pool.end();
+  process.env.TEST_BATTLES_DATABASE_URL = battles.toString();
 }

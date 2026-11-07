@@ -8,13 +8,33 @@ import type { Db } from './db.js';
 import { errorHandler, notFoundHandler } from './errors.js';
 import { apiRouter, publicRouter } from './routes/index.js';
 import { passwordAuthRouter } from './password-auth.js';
+import { RealtimeHub } from './battles/realtime.js';
+import { battlesPublicRouter, battlesRouter } from './battles/routes.js';
+import { BattleService } from './battles/service.js';
+import { Matchmaking } from './battles/matchmaking.js';
+import { Ladder } from './battles/ladder.js';
+
+export interface AppDeps {
+  hub: RealtimeHub;
+  battles: BattleService;
+  matchmaking: Matchmaking;
+  ladder: Ladder;
+}
+
+/** Realtime hub + battle service; the server (index.ts) and tests build them explicitly. */
+export function createDeps(cfg: Config, db: Db, logger: Logger, opts: ConstructorParameters<typeof BattleService>[3] = {}): AppDeps {
+  const hub = new RealtimeHub(logger, cfg.AUTH_DEV_HEADER);
+  const battles = new BattleService(db, hub, logger, opts);
+  return { hub, battles, matchmaking: new Matchmaking(battles), ladder: new Ladder(battles) };
+}
 
 /**
  * `isReady` lets the server accept connections (so the host sees an open port)
  * while startup migrations are still running: until it returns true,
  * /healthz and the API answer 503.
  */
-export function createApp(cfg: Config, db: Db, logger: Logger, isReady: () => boolean = () => true): Express {
+export function createApp(cfg: Config, db: Db, logger: Logger, isReady: () => boolean = () => true,
+  deps: AppDeps = createDeps(cfg, db, logger)): Express {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -40,7 +60,8 @@ export function createApp(cfg: Config, db: Db, logger: Logger, isReady: () => bo
 
   app.use('/api/v1', passwordAuthRouter(cfg, db));
   app.use('/api/v1', publicRouter(db));
-  app.use('/api/v1', authenticate(cfg, db), apiRouter(db));
+  app.use('/api/v1', battlesPublicRouter(db));
+  app.use('/api/v1', authenticate(cfg, db), apiRouter(db), battlesRouter(deps.battles, deps.matchmaking, deps.ladder));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

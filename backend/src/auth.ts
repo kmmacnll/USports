@@ -82,6 +82,14 @@ export function authenticate(cfg: Config, db: Db): RequestHandler {
   };
 }
 
+/** users.id for an auth subject, creating the row on first sight (realtime dev login). */
+export async function provisionSubject(db: Db, subject: string): Promise<string> {
+  const { rows } = await db.query<{ id: string }>(
+    `INSERT INTO users (auth_subject, display_name) VALUES ($1, 'Player')
+     ON CONFLICT (auth_subject) DO UPDATE SET auth_subject = EXCLUDED.auth_subject RETURNING id`, [subject.slice(0, 255)]);
+  return rows[0]!.id;
+}
+
 export function requireUser(req: { user?: AuthUser }): AuthUser {
   if (!req.user) throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication required');
   return req.user;

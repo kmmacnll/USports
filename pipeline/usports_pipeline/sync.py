@@ -5,6 +5,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import psycopg
@@ -12,9 +13,12 @@ import psycopg
 from . import db
 from .db import Jsonb
 from .normalize import position_tokens
-from .seasons import current_season, season_start_year
+from .seasons import current_season, validate_season
 from .sports import SportAdapter, get_adapter
 from .transform import build_schedule
+
+if TYPE_CHECKING:
+    from .sources import StatsSource
 
 log = logging.getLogger(__name__)
 
@@ -57,27 +61,23 @@ class Frames:
     players: dict[str, pd.DataFrame]
 
 
-def load_frames(adapter: SportAdapter, season: str, source_dir: Path | None = None) -> Frames:
-    """Fetch via usportspy, or read the same CSVs from a local directory
-    (<dir>/<code>/schedule.csv and <dir>/<code>/<frame>_<season>.csv for each
-    of adapter.frame_names) for offline replays and tests."""
-    if source_dir:
-        base = Path(source_dir) / adapter.code
-        return Frames(
-            schedule=pd.read_csv(base / "schedule.csv"),
-            players={n: pd.read_csv(base / f"{n}_{season}.csv") for n in adapter.frame_names},
-        )
-    year = season_start_year(season)
-    return Frames(
-        schedule=fetch_with_retries(f"{adapter.code} schedule", adapter.fetch_schedule),
-        players=fetch_with_retries(f"{adapter.code} box scores", lambda: adapter.fetch_frames([year])),
-    )
+def load_frames(adapter: SportAdapter, season: str, source_dir: Path | None = None,
+                source: "StatsSource | None" = None) -> Frames:
+    """Schedule + box-score frames for one sport/season from a StatsSource
+    (sources.py). Default: usportspy, or CsvDirSource when source_dir is given
+    (<dir>/<code>/schedule[_<season>].csv and <dir>/<code>/<frame>_<season>.csv)."""
+    from .sources import CsvDirSource, UsportspySource
+    validate_season(season)
+    if source is None:
+        source = CsvDirSource(source_dir) if source_dir else UsportspySource()
+    return Frames(schedule=source.schedule(adapter, season), players=source.box_frames(adapter, season))
 
 
 def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
                             conn: psycopg.Connection | None = None,
                             source_dir: Path | None = None,
-                            frames: Frames | None = None) -> dict:
+                            frames: Frames | None = None,
+                            source: "StatsSource | None" = None) -> dict:
     """Pull schedule + box scores for one sport/season and upsert them.
 
     Idempotent: re-running updates changed scores and stat lines in place and
@@ -85,8 +85,8 @@ def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
     Runs in a single transaction.
     """
     adapter = get_adapter(sport_code)
-    season = season or current_season()
-    frames = frames or load_frames(adapter, season, source_dir)
+    season = validate_season(season or current_season())
+    frames = frames or load_frames(adapter, season, source_dir, source)
 
     teams, games = build_schedule(frames.schedule, season)
     result = adapter.build_lines(frames.players, games)
@@ -141,11 +141,11 @@ def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
                     for k, v in ln.stats.items():
                         merged[k] = max(merged[k], v) if k in merged else v
                     starter = bool(prev_row[5]) or bool(ln.is_starter) if (prev_row[5] is not None or ln.is_starter is not None) else None
-                    stat_rows[(aid, gid)] = (*prev_row[:5], starter, Jsonb(merged))
+                    stat_rows[(aid, gid)] = (*prev_row[:5], starter, Jsonb(merged), prev_row[7] or ln.position)
                     merged_lines += 1
                 else:
                     stat_rows[(aid, gid)] = (aid, gid, ln.game_date, uid, uni[ln.opponent_slug],
-                                             ln.is_starter, Jsonb(ln.stats))
+                                             ln.is_starter, Jsonb(ln.stats), ln.position)
 
             n_keys = db.save_identity_keys(cur, sport, idx)
 
@@ -168,14 +168,14 @@ def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
             cur.executemany(
                 """
                 INSERT INTO game_stats (athlete_id, game_id, game_date, university_id, opponent_id,
-                                        is_starter, stat_payload_json)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                        is_starter, stat_payload_json, position)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (athlete_id, game_id) DO UPDATE SET
                     game_date = EXCLUDED.game_date, university_id = EXCLUDED.university_id,
                     opponent_id = EXCLUDED.opponent_id, is_starter = EXCLUDED.is_starter,
-                    stat_payload_json = EXCLUDED.stat_payload_json
-                WHERE (game_stats.stat_payload_json, game_stats.is_starter)
-                      IS DISTINCT FROM (EXCLUDED.stat_payload_json, EXCLUDED.is_starter)
+                    stat_payload_json = EXCLUDED.stat_payload_json, position = EXCLUDED.position
+                WHERE (game_stats.stat_payload_json, game_stats.is_starter, game_stats.position)
+                      IS DISTINCT FROM (EXCLUDED.stat_payload_json, EXCLUDED.is_starter, EXCLUDED.position)
                 RETURNING (xmax = 0) AS inserted
                 """,
                 list(stat_rows.values()),

@@ -37,3 +37,47 @@ def split_segment(segment: str) -> tuple[str, str]:
     if not m:
         raise ValueError(f"not a season segment: {segment!r}")
     return f"{m.group(1)}-{m.group(2)}", m.group(3)
+
+
+# ------------------------------------------------------------------ data floor
+# Only 2025-26 onward is ever ingested or rated (product decision for Draft
+# Battles: older seasons describe rosters that have graduated).
+MIN_SEASON = "2025-26"
+
+
+class SeasonTooOld(ValueError):
+    pass
+
+
+def validate_season(season: str) -> str:
+    """Reject anything before MIN_SEASON (and anything that isn't a season label)."""
+    if season_start_year(season) < season_start_year(MIN_SEASON):
+        raise SeasonTooOld(f"season {season} is before {MIN_SEASON}; only {MIN_SEASON} onward is ingested")
+    return season
+
+
+def seasons_since_floor(today: dt.date | None = None) -> list[str]:
+    """MIN_SEASON .. current season, oldest first."""
+    first = season_start_year(MIN_SEASON)
+    last = season_start_year(current_season(today))
+    return [season_label(y) for y in range(first, last + 1)]
+
+
+# ------------------------------------------------------------------ in season
+# Ingestion windows by sports.season_type, as (month, day) inclusive. Wide
+# enough to cover exhibitions and national championships; outside them the
+# nightly job skips the sport (--in-season-only).
+SEASON_WINDOWS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {
+    "FALL":   ((8, 1), (12, 15)),     # football to the Vanier Cup, soccer to nationals
+    "WINTER": ((9, 15), (4, 15)),     # hockey, basketball, volleyball incl. March championships
+    "SPRING": ((3, 1), (6, 30)),
+}
+
+
+def in_season(season_type: str, today: dt.date | None = None) -> bool:
+    today = today or dt.date.today()
+    (sm, sd), (em, ed) = SEASON_WINDOWS[season_type]
+    md = (today.month, today.day)
+    if (sm, sd) <= (em, ed):
+        return (sm, sd) <= md <= (em, ed)
+    return md >= (sm, sd) or md <= (em, ed)       # window wraps the new year

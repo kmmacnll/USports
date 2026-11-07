@@ -105,7 +105,9 @@ services:
     branch: main
     schedule: "0 7 * * *"      # Render cron is UTC: 07:00 UTC = 2 AM EST (3 AM during EDT)
     buildCommand: pip install -r pipeline/requirements.txt
-    startCommand: cd pipeline && python ingest_usports.py --sport all --no-season-check
+    # --in-season-only: sports outside their season window (seasons.SEASON_WINDOWS) are skipped.
+    # Player ratings (Draft Battles) are recomputed by the API when it sees new stats.
+    startCommand: cd pipeline && python ingest_usports.py --sport all --in-season-only --no-season-check
     buildFilter:
       paths: [pipeline/**]
     envVars:

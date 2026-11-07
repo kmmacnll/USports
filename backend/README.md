@@ -72,6 +72,161 @@ POST /api/v1/leagues/lg_12/roster/swap
 Season stats leave out exhibition games. Basketball summaries are `ppg`, `rpg`, `apg`, `spg`, `bpg`, `tpg` and `mpg`. Football summaries are `pass_ypg`, `pass_tdpg`, `rush_ypg`, `rush_tdpg`, `rec_pg`, `rec_ypg`, `rec_tdpg`, `fgm_pg`, `tackles_pg` and `sacks_pg`. `season_fantasy_points` on a roster
 uses the league's own competition scoring.
 
+## Draft Battles
+
+A fast 1v1 mode: two users snake-draft a lineup from one sport, then the
+server simulates a match from the players' ratings and streams it to both
+users as a live play-by-play. All code is in `src/battles/`.
+
+| File | What |
+|---|---|
+| `sports/<sport>.ts` | **one config per sport**: lineup, positions + inference, rating metrics, sub-ratings, OVR weights, shrinkage k, sim tuning, timing |
+| `config.ts` | settings that aren't sport-specific (recency weights, calibration curve, pick timer, invite TTLs, queue widening, Elo K, ladder sizes) |
+| `ratings/` | OVR + sub-ratings: pure maths (`compute.ts`), DB job (`job.ts`), CLIs |
+| `sim/` | `simulate(sport, lineupA, lineupB, seed)`: one deterministic engine per sport; `calibrate.ts` Monte Carlo harness |
+| `draft.ts` | snake order, slot eligibility, best available (pure) |
+| `service.ts` | battle lifecycle, picks, auto-picks, running and streaming matches, `tick()` |
+| `matchmaking.ts` | friend invites, notifications, ranked queue |
+| `ladder.ts` | Elo, weekly division cohorts, weekly reset, `/ladder/me`, `/me/stats` |
+| `realtime.ts` | WebSocket hub (`ws`) |
+| `scheduler.ts` | runs `tick()` every second; recomputes ratings when stats change |
+| `dev/` | fake players for every sport (`npm run dev:seed`) |
+
+```bash
+npm run dev:seed                 # fictional schools/players/games for every sport + a ratings run + dev_alice/dev_bob
+npm run ratings:dev -- --force   # recompute ratings now (normally automatic)
+npm run ratings:top25            # top 25 per sport + the OVR distribution, for sanity checks
+npx tsx src/battles/sim/calibrate.ts hockey 10000   # win rates / scores / OT / timing at +0, +5, +10 OVR
+```
+
+### Ratings
+
+OVR 40-99 plus 4-6 sub-ratings per position (hockey F/D: SHT PAS SKT DEF PHY;
+G: REF POS HND STA; basketball: SCO 3PT PLY REB DEF; soccer outfield: ATT FIN
+PAS DEF DIS, GK: REF POS HND STA; volleyball: ATK SRV BLK DIG SET; football
+QB: ACC ARM DEC MOB, RB: RSH ELU POW REC BAL, WR: CAT SPD PRD RZN, DEF: TKL PRS
+COV TAK). Method (see `ratings/compute.ts`): stats from **2025-26 onward**,
+no exhibitions; rate metrics (per game / 40 min / set / 90 min, percentages);
+recency weights 0.65 current / 0.35 previous applied to each season's totals;
+Bayesian shrinkage toward the position's pooled rate, `(n·x + k·base)/(n+k)`;
+percentiles within sport + gender + position, also pulled toward the middle
+by `n/(n+k)` so a 2-game hot streak can't rank first; a calibration curve maps
+percentiles to ratings (floor 40, median 68, top 10% ≥ 80, top 1% ≥ 88).
+Zero qualifying games: 60 everywhere and `is_new`. Some sub-ratings are
+proxies because the box scores have no such stat (hockey SKT/PHY, soccer DEF);
+their labels say so. Positions come from the roster, then the box score, then
+are inferred from the stat profile (`position_source`). Kickers, linemen and
+anyone else outside a battle position aren't rated.
+
+Each recompute writes `player_ratings` and one `player_rating_history` row
+per player; the API scheduler recomputes when `game_stats`/`athletes`/`games`
+changed (checked every 15 min), so the nightly ingest is followed by new
+ratings. A battle uses a snapshot of each pick's rating.
+
+### Matches
+
+Server-authoritative and deterministic: the same lineups and seed always
+produce the same `MatchResult`. Regulation plays back in 150-160 s, overtime
+adds 30-50 s. Overtime: hockey 3-on-3 sudden death, then a shootout (winner
+credited one goal); basketball 5:00 periods; soccer golden goal, then
+penalties (score stays level, `winner` set); football alternating possessions
+from the 35; volleyball has none (a fifth set is the overtime segment).
+Volleyball `scoreA`/`scoreB` are sets; its `clock` is the current set's points.
+`side` is the team an event is about: scorer, saving team, team that lost the
+ball (`turnover`), offending team (`foul`/`penalty`), winner (`final`).
+Calibration (10,000 sims per sport, `test/battles-sim.test.ts`): +5 average
+OVR wins about 64-66%, +10 about 76-78%.
+
+```ts
+MatchEvent  { t, period, clock, type, side, playerIds, text, scoreA, scoreB, momentum }
+MatchResult { matchId, sport, seed, events, finalScoreA, finalScoreB, winner, wentToOT, durationMs }
+```
+
+### Battle states
+
+`queued` (friend invite sent) → `drafting` → `simulating` → `complete`, plus
+`cancelled` (declined, forfeited, invite cancelled) and `expired` (invite timed
+out). Deadlines live in the database and a 1 s tick acts on them, so a
+restart loses nothing: overdue picks are auto-picked, finished matches
+completed and running streams resumed. A user is busy (409 `ALREADY_IN_BATTLE`
+/ `ALREADY_QUEUED`) while drafting or simulating, while an invite they sent is
+pending, or while in the ranked queue. Battles need accepted terms and follow
+the athlete rule, like leagues.
+
+### Endpoints
+
+Sports are chosen with `sport` (`hockey`, `basketball`, `soccer`,
+`volleyball`, `football`) + `gender` (`men`/`women`; football is men only), or
+`sport_id` (`usports_mhk`). Battle ids are `bt_<n>`, invites `inv_<n>`,
+notifications `ntf_<n>`.
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/players?sport&gender&position` | – | Rated pool, best first: name, school, number, class year, `position`, `ovr`, `sub_ratings`, `is_new`, `ovr_change` (vs the previous run). Also `q` (name), `battle_id` (hide players drafted in it), `page`, `page_size` (≤200). No photos or logos |
+| POST | `/battles/ai` | ✓ | `{sport, gender}` → 201 battle, drafting at once. The AI drafts the highest-OVR player that fits an open slot (1.2 s "thinking" delay). Unranked |
+| POST | `/battles/invite` | ✓ | `{username \| user_id, sport, gender}` → 201 invite. Online friend: realtime `invite.received`, 60 s expiry. Offline: inbox notification (+ push hook), 24 h expiry |
+| GET | `/battles/invites` | ✓ | `{incoming, outgoing}` (last 7 days) with `status` pending / accepted / declined / expired / cancelled |
+| POST | `/battles/invite/:id/respond` | ✓ | `{accept: true\|false}` (invitee). Accept starts the draft for both. 410 `INVITE_EXPIRED` |
+| DELETE | `/battles/invite/:id` | ✓ | Inviter withdraws a pending invite |
+| POST | `/queue/random` | ✓ | `{sport, gender}` → 202 `{status:"queued", matching, waited_seconds, estimated_wait_seconds}` or 201 `{status:"matched", battle_id}`. Ranked |
+| GET | `/queue/random` | ✓ | `queued` (as above) / `matched` / `idle` |
+| DELETE | `/queue/random` | ✓ | Leave the queue (404 `NOT_QUEUED`) |
+| GET | `/battles/:id` | ✓ | Participants only. State, sides, lineup slots, draft (`order`, `on_the_clock`, `deadline`), picks with rating snapshots, and `match` with only the events whose `t` has passed (`elapsed_ms`, `duration_ms`; `final` once complete) |
+| POST | `/battles/:id/pick` | ✓ | `{athlete_id}`. Errors: `NOT_YOUR_TURN`, `ALREADY_PICKED`, `NO_OPEN_SLOT`, `NOT_IN_POOL`, `DRAFT_NOT_ACTIVE` |
+| POST | `/battles/:id/forfeit` | ✓ | Abandon an unranked battle before the match (ranked drafts can't be abandoned: the timer auto-picks) |
+| GET | `/ladder/me` | ✓ | Division, Elo, this week's cohort standings (rank, wins, losses, Elo, promotion/relegation zone), `resets_at` |
+| GET | `/me/stats` | ✓ | Elo, division, ranked/provisional, this week's W-L, totals per mode, last 20 battles with score and Elo change |
+| PUT | `/me/username` | ✓ | `{username}` 3-20 of `A-Za-z0-9_.`, unique (409 `USERNAME_TAKEN`) |
+| GET | `/users/search?q=` | ✓ | Username / display-name prefix search, with `online` |
+| GET | `/notifications` | ✓ | Inbox (unexpired), `unread` count |
+| POST | `/notifications/:id/read` | ✓ | Mark read |
+| POST | `/realtime/ticket` | ✓ | One-time WebSocket ticket, valid 60 s |
+
+### Realtime
+
+`GET /api/v1/realtime?ticket=<ticket>` upgrades to a WebSocket (locally,
+with `AUTH_DEV_HEADER=true`, also `?dev_user=<subject>`). Every connection is
+on its own `user:usr_<n>` channel. Client → server:
+`{"op":"subscribe","channel":"battle:bt_12"}` (participants only),
+`{"op":"unsubscribe",...}`, `{"op":"ping"}`. Server → client:
+`{"channel","type","data","ts"}`.
+
+| Channel | Type | Data |
+|---|---|---|
+| user | `hello` | `{user_id, channels}` on connect |
+| user | `invite.received` | the invite (online invitee) |
+| user | `invite.updated` | the invite, on every status change (both sides) |
+| user | `notification.created` | an inbox item (offline invite) |
+| user | `queue.status` | `{status, matching, waited_seconds, estimated_wait_seconds}` when the search widens |
+| user | `queue.matched` | `{battle_id, sport_id, waited_seconds}` |
+| user | `battle.created`, `battle.state` | battle id and state changes, for the user's own battles |
+| user | `ladder.updated` | after a ranked battle: `{battle_id, result, elo, elo_change, division}` |
+| user | `ladder.reset` | weekly outcome: `{week_start, rank, outcome, from, division}` |
+| battle | `battle.sync` | sent on subscribe: the full `GET /battles/:id` view, incl. every match event already due, so a reconnecting client resumes at the right point |
+| battle | `battle.state` | `drafting` (`first_pick`), `simulating` (`starts_at`, `duration_ms`), `complete` (`winner`, scores), `cancelled` |
+| battle | `draft.turn` | `{pick_number, side, deadline, pick_seconds}` |
+| battle | `draft.pick` | `{pick_number, side, slot, auto, player, next}` |
+| battle | `match.event` | `{index, event: MatchEvent}`, emitted at `starts_at + event.t`; dedupe by `index` after a sync |
+| user | `error` / `pong` | protocol replies |
+
+The hub is in-process: one API instance. Several instances would need a
+shared bus behind `RealtimeHub.publish` (e.g. Postgres `LISTEN/NOTIFY`); the
+tick itself is already safe to run in several processes (`SKIP LOCKED`,
+advisory locks).
+
+### Ladder
+
+Elo and divisions are per user across all sports: one ladder, while every
+battle (and every queue match) is a single sport. Elo starts at 1000, K = 40 for the first 10 ranked matches, then 24; only
+Play Random changes it. Divisions: Walk-On, Bench, Starter, Varsity,
+All-Star, Captain, Hall of Fame. A player's first ranked result of a week
+puts them in a cohort of up to 30 in their division; cohorts rank by weekly
+wins, Elo breaks ties. At Monday 00:00 America/Toronto the top 5 move up and
+the bottom 5 down (Hall of Fame: no promotion; Walk-On: no relegation).
+Cohorts smaller than 10 move at most half their members each way, and
+promotion needs at least one win. The reset runs from the tick and is
+idempotent (`ladder_resets`).
+
 ## Errors
 
 Every error is returned as `{ "error": { "code", "message", "details?" } }`.
@@ -80,10 +235,11 @@ Every error is returned as `{ "error": { "code", "message", "details?" } }`.
 |---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_ID`, `NO_CHANGE` |
 | 401 | `UNAUTHENTICATED`, `INVALID_TOKEN` |
-| 403 | `TERMS_NOT_ACCEPTED`, `ATHLETE_OWN_SPORT` |
-| 404 | `NOT_FOUND`, `NO_TEAM`, `NOT_ON_ROSTER`, `UNKNOWN_SPORT`, `ROUTE_NOT_FOUND` |
-| 409 | `LEAGUE_FULL`, `ALREADY_IN_LEAGUE`, `TEAM_NAME_TAKEN`, `ATHLETE_ALREADY_ROSTERED`, `SLOT_OCCUPIED`, `ROSTER_FULL`, `TERMS_VERSION_MISMATCH`, `ATHLETE_DECLARATION_LOCKED` |
-| 422 | `INVALID_SLOT`, `INELIGIBLE_POSITION`, `WRONG_SPORT`, `ROSTER_SIZE_MISMATCH`, `SPORT_INACTIVE`, `NO_RULESET`, `UNKNOWN_RULESET`, `ATHLETE_SPORTS_REQUIRED`, `CONSTRAINT_VIOLATION` |
+| 403 | `NOT_IN_BATTLE`, `TERMS_NOT_ACCEPTED`, `ATHLETE_OWN_SPORT` |
+| 404 | `USER_NOT_FOUND`, `NOT_QUEUED`, `NOT_FOUND`, `NO_TEAM`, `NOT_ON_ROSTER`, `UNKNOWN_SPORT`, `ROUTE_NOT_FOUND` |
+| 409 | `ALREADY_IN_BATTLE`, `ALREADY_QUEUED`, `NOT_YOUR_TURN`, `ALREADY_PICKED`, `DRAFT_NOT_ACTIVE`, `INVITE_NOT_PENDING`, `USERNAME_TAKEN`, `RANKED_NO_FORFEIT`, `LEAGUE_FULL`, `ALREADY_IN_LEAGUE`, `TEAM_NAME_TAKEN`, `ATHLETE_ALREADY_ROSTERED`, `SLOT_OCCUPIED`, `ROSTER_FULL`, `TERMS_VERSION_MISMATCH`, `ATHLETE_DECLARATION_LOCKED` |
+| 410 | `INVITE_EXPIRED` |
+| 422 | `NO_OPEN_SLOT`, `NOT_IN_POOL`, `POOL_TOO_SMALL`, `CANNOT_INVITE_SELF`, `UNKNOWN_POSITION`, `INVALID_SLOT`, `INELIGIBLE_POSITION`, `WRONG_SPORT`, `ROSTER_SIZE_MISMATCH`, `SPORT_INACTIVE`, `NO_RULESET`, `UNKNOWN_RULESET`, `ATHLETE_SPORTS_REQUIRED`, `CONSTRAINT_VIOLATION` |
 
 Most business rules live in the database (see `db/README.md`). The database
 raises them with a stable `HINT`, and `src/errors.ts` maps that hint to these
@@ -115,6 +271,7 @@ src/
   sport-display.ts  stat summaries (ppg/rpg…), slot ordering, eligibility
   routes/index.ts   routers + zod request schemas
   services/         sports, athletes, leagues/rosters, me (all SQL lives here)
+  battles/          Draft Battles (see the section above)
 test/               vitest + supertest against a real Postgres
 ```
 

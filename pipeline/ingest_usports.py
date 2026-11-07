@@ -5,6 +5,11 @@
   python ingest_usports.py --sport usports_mbk --rosters       # ...then scrape usports.ca rosters
   python ingest_usports.py --sport all --season 2026-27
   python ingest_usports.py --sport usports_mbk --dry-run       # run everything, roll back
+  python ingest_usports.py --sport all --backfill              # every season from 2025-26 to now
+  python ingest_usports.py --sport all --in-season-only        # nightly: skip sports out of season
+  python ingest_usports.py --check-sources                     # robots.txt status of every scraped site
+
+Only 2025-26 onward is ever ingested (seasons.MIN_SEASON).
 
 Requires DATABASE_URL. Safe to re-run: all writes are upserts.
 """
@@ -18,7 +23,9 @@ from pathlib import Path
 
 from usports_pipeline import db
 from usports_pipeline.rosters import sync_rosters
-from usports_pipeline.seasons import current_season
+from usports_pipeline.polite_http import PoliteHttpClient
+from usports_pipeline.seasons import SeasonTooOld, current_season, in_season, seasons_since_floor, validate_season
+from usports_pipeline.sources import CachingSource, CsvDirSource, UsportspySource, check_sources
 from usports_pipeline.sports import ADAPTERS
 from usports_pipeline.sync import disable_usportspy_season_check, sync_athletes_and_stats
 
@@ -28,6 +35,15 @@ log = logging.getLogger("ingest")
 
 class _DryRun(Exception):
     pass
+
+
+def filter_in_season(conn, codes: list[str], today=None) -> tuple[list[str], list[str]]:
+    """-> (in season, skipped) using sports.season_type and seasons.SEASON_WINDOWS."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT code, season_type::text FROM sports WHERE code = ANY(%s)", (codes,))
+        types = dict(cur.fetchall())
+    keep = [c for c in codes if in_season(types.get(c, "WINTER"), today)]
+    return keep, [c for c in codes if c not in keep]
 
 
 def resolve_sports(conn, arg: str) -> list[str]:
@@ -63,9 +79,14 @@ def run_step(conn, label: str, fn, dry_run: bool) -> tuple[dict | None, str | No
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--sport", required=True,
+    p.add_argument("--sport", required=False,
                    help=f"'all' (active sports in the database), or codes, comma-separated ({', '.join(sorted(ADAPTERS))})")
-    p.add_argument("--season", default=None, help="e.g. 2026-27 (default: current season)")
+    p.add_argument("--season", default=None, help="e.g. 2026-27 (default: current season; 2025-26 is the earliest)")
+    p.add_argument("--backfill", action="store_true", help="every season from 2025-26 to the current one")
+    p.add_argument("--in-season-only", action="store_true", help="skip sports outside their season window")
+    p.add_argument("--cache-dir", type=Path, help="keep a raw CSV copy of every download here and reuse it")
+    p.add_argument("--cache-max-age-h", type=float, default=6.0, help="reuse cached downloads younger than this")
+    p.add_argument("--check-sources", action="store_true", help="print robots.txt status for every scraped site and exit")
     p.add_argument("--rosters", action="store_true", help="also scrape usports.ca roster pages")
     p.add_argument("--skip-stats", action="store_true", help="only run the roster scrape")
     p.add_argument("--render", action="store_true", help="render roster pages with Playwright")
@@ -82,8 +103,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_season_check:
         disable_usportspy_season_check()
 
-    season = args.season or current_season()
+    if args.check_sources:
+        print(json.dumps(check_sources(lambda code: PoliteHttpClient(source=code)), indent=2))
+        return 0
+    if not args.sport:
+        p.error("--sport is required")
+    try:
+        seasons = seasons_since_floor() if args.backfill else [validate_season(args.season or current_season())]
+    except (SeasonTooOld, ValueError) as e:
+        p.error(str(e))
+    season = seasons[-1]
+    source = None
+    if args.cache_dir:
+        inner = CsvDirSource(args.source_dir) if args.source_dir else UsportspySource()
+        source = CachingSource(inner, args.cache_dir, max_age_s=args.cache_max_age_h * 3600)
     results: list[dict] = []
+    skipped: list[str] = []
     failures: dict[str, str] = {}
     conn = db.connect()
     # Autocommit, so each sport's `with conn.transaction()` is a real, committed
@@ -93,29 +128,38 @@ def main(argv: list[str] | None = None) -> int:
     conn.autocommit = True
     try:
         sports = resolve_sports(conn, args.sport)
+        if args.in_season_only:
+            sports, skipped = filter_in_season(conn, sports)
+            if skipped:
+                log.info("out of season, skipped: %s", ", ".join(skipped))
         unknown = [c for c in sports if c not in ADAPTERS]
         for code in unknown:
             failures[code] = "no ingestion adapter"
         for code in [c for c in sports if c in ADAPTERS]:
-            if not args.skip_stats:
-                res, err = run_step(conn, f"{code} stats",
-                                    lambda: sync_athletes_and_stats(code, season, conn=conn, source_dir=args.source_dir),
-                                    args.dry_run)
-                if err:
-                    failures[f"{code} stats"] = err
-                elif res:
-                    results.append(res)
-            if args.rosters:
-                res, err = run_step(conn, f"{code} rosters",
-                                    lambda: sync_rosters(code, season, conn=conn, render=args.render), args.dry_run)
-                if err:
-                    failures[f"{code} rosters"] = err
-                elif res:
-                    results.append(res)
+            for season in seasons:
+                tag = code if len(seasons) == 1 else f"{code} {season}"
+                if not args.skip_stats:
+                    res, err = run_step(conn, f"{tag} stats",
+                                        lambda: sync_athletes_and_stats(code, season, conn=conn,
+                                                                        source_dir=args.source_dir, source=source),
+                                        args.dry_run)
+                    if err:
+                        failures[f"{tag} stats"] = err
+                    elif res:
+                        results.append(res)
+                if args.rosters and season == seasons[-1]:     # rosters only exist for the current season
+                    res, err = run_step(conn, f"{code} rosters",
+                                        lambda: sync_rosters(code, season, conn=conn, render=args.render),
+                                        args.dry_run)
+                    if err:
+                        failures[f"{code} rosters"] = err
+                    elif res:
+                        results.append(res)
     finally:
         conn.close()
 
-    print(json.dumps({"season": season, "dry_run": args.dry_run, "results": results, "failures": failures},
+    print(json.dumps({"season": season, "seasons": seasons, "dry_run": args.dry_run, "skipped_out_of_season": skipped,
+                      "results": results, "failures": failures},
                      indent=2, default=str))
     ok = len(results)
     if failures:
