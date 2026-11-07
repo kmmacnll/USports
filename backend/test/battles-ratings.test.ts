@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createPool, type Db } from '../src/db.js';
 import { BATTLES } from '../src/battles/config.js';
-import { generateFakeData } from '../src/battles/dev/fake-data.js';
+import { generateFakeData } from './fake-data.js';
 import {
   calibrate, computeRatings, percentileRanks, type PlayerInput, resolvePosition, shrink, weightedMean, weightedTotals,
 } from '../src/battles/ratings/compute.js';

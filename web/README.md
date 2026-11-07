@@ -27,7 +27,7 @@ npm run build && npm start      # production
 | `/scores` | Scores by sport and day (from 3 days back to 4 ahead), grouped Live / Upcoming / Final, with your rostered players' teams marked |
 | `/login` | Email + password sign-in. In local dev, also "continue as" any name |
 | `/signup` | Create an account: name, email, optional university, password, confirm password |
-| `/battles` | Draft Battles (full-screen, mobile-first): home pager, lobby, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. Play vs AI works; ranked, friends, invites and the ladder say "coming soon" until the web app is wired to the Battles API. Uses a fictional Women's Hockey athlete pool and no made-up users: your name comes from your session and your W–L record is kept on your device. See `components/battles/` |
+| `/battles` | Draft Battles (full-screen, mobile-first): home pager, lobby, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. Play vs AI works; ranked, friends, invites and the ladder say "coming soon" until the web app is wired to the Battles API. The draft pool is real U Sports hockey players rated by the API (`GET /players`); with no ratings loaded, play is disabled. No made-up athletes or users: your name comes from your session and your W–L record is kept on your device. See `components/battles/` |
 
 ## How it talks to the API
 
@@ -61,7 +61,7 @@ Built from the "Draft Battles" Claude Design handoff. Everything lives in
 `components/battles/` and `app/battles/`, scoped under the `.vb` class (the
 rest of the app uses the same palette from `app/globals.css`).
 
-- `data.ts`: the fictional athlete pool and the house AI opponent, plus
+- `data.ts`: maps the API's rated players into the draft pool (`fromApi`, `setPool`), the house AI opponent, plus
   `simulate()`, a seeded match engine that turns two drafted lineups into the
   event stream the live feed plays (`{t, period, clock, type, side, playerIds,
   text, scoreA, scoreB, momentum}`), with sudden-death OT on a tie.
@@ -72,9 +72,11 @@ rest of the app uses the same palette from `app/globals.css`).
 - `me.tsx`: the signed-in user (display name from `/me`, passed in by
   `app/battles/page.tsx`) and your battle record, which is stored in
   `localStorage` (`vhq.battles.record`) until the UI talks to the API.
+- `app/battles/page.tsx` loads the women's and men's hockey pools from
+  `GET /players` (cached 5 minutes). A battle needs at least 12 rated players;
+  until the ratings job has run on real data, Play AI is disabled.
 - Not built yet: wiring the UI to the backend's Battles endpoints (matchmaking,
   friend invites, Elo and the weekly ladder), so ranked, friends, the inbox and
-  the ladder show "coming soon"; real U Sports athletes in the draft pool; and
-  sports other than hockey.
+  the ladder show "coming soon"; and sports other than hockey.
 
 

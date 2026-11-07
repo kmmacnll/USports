@@ -21,7 +21,7 @@ export DATABASE_URL=postgres://usports:usports@localhost:5432/usports_fantasy
 cd pipeline && python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python ingest_usports.py --sport usports_mbk --rosters
 cd ../backend && npm ci && cp .env.example .env
-npm run dev:seed      # optional: fake players for every sport so Draft Battles works locally
+npm run dev:seed      # optional: dev users + a ratings run over the real athletes you ingested
 npm run dev           # http://localhost:3000/api/v1/sports
 cd ../web && npm ci && cp .env.example .env.local && npm run dev  # http://localhost:3001
 ```

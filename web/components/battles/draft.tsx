@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { avgOvr, bestPick, DRAFT_PICKS, PICK_SECONDS, player, PLAYERS, slotOpen, type Opponent, type Pos, type Side } from './data';
+import { avgOvr, bestPick, DRAFT_PICKS, PICK_SECONDS, player, pool as getPool, slotOpen, type Opponent, type Pos, type Side } from './data';
 import { useMe } from './me';
 import { DISPLAY, EMPTY_SLOT_CLIP, PlayerCard } from './ui';
 
@@ -79,7 +79,7 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
     return () => clearTimeout(t);
   }, [turn, done]);
 
-  const pool = PLAYERS.filter((p) => !taken.includes(p.id) && (filt === 'All' || p.pos === filt)).sort((a, b) => b.ovr - a.ovr);
+  const pool = getPool().filter((p) => !taken.includes(p.id) && (filt === 'All' || p.pos === filt)).sort((a, b) => b.ovr - a.ovr);
   const aA = avgOvr(dA), aB = avgOvr(dB);
   const ringColor = myTurn ? (clock <= 5 ? '#FF8A3D' : '#E5484D') : '#8EB1F5';
   const ringOffset = done ? 0 : myTurn ? 113.1 * (1 - clock / PICK_SECONDS) : 0;

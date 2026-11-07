@@ -6,8 +6,8 @@ import { DIVISIONS, player, playerOfMatch, type Match, type Opponent } from './d
 import { useMe, useRecord } from './me';
 import { DivisionBadge, DISPLAY, Icon, Logo, PlayerCard, TopBar } from './ui';
 
-export function ResultScreen({ match, opp, onRematch, onHome }: {
-  match: Match; opp: Opponent; onRematch: () => void; onHome: () => void;
+export function ResultScreen({ match, opp, label, onRematch, onHome }: {
+  match: Match; opp: Opponent; label: string; onRematch: () => void; onHome: () => void;
 }) {
   const me = useMe();
   const rec = useRecord();
@@ -18,7 +18,7 @@ export function ResultScreen({ match, opp, onRematch, onHome }: {
   const pm = player(potm.id);
   const oppName = opp.ai ? opp.user : `@${opp.user}`;
   const score = `${match.scoreA}–${match.scoreB}`;
-  const vsLine = win ? `${me.handle} def. ${oppName} · Women's Hockey` : `${me.handle} vs ${oppName} · Women's Hockey`;
+  const vsLine = win ? `${me.handle} def. ${oppName} · ${label}` : `${me.handle} vs ${oppName} · ${label}`;
   const ink = win ? '#3DD68C' : '#FF6B7A';
   const shareText = `${win ? 'WIN' : 'LOSS'} ${score}${match.ot ? ' OT' : ''} · ${vsLine} · Player of the match: ${pm.first} ${pm.last} (${potm.line}) · VarsityHQ Draft Battle`;
 

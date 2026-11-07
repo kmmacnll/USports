@@ -5,15 +5,17 @@ import { BellButton, Chip, Icon, PlayRandomButton, TopBar } from './ui';
 
 export type Gender = 'M' | 'W';
 
-export function LobbyScreen({ sport, gender, setSport, setGender, onBack, onInbox, onAI, onFriend }: {
+export function LobbyScreen({ sport, gender, setSport, setGender, onBack, onInbox, onAI, onFriend, poolSize }: {
   sport: SportId; gender: Gender; setSport: (s: SportId) => void; setGender: (g: Gender) => void;
-  onBack: () => void; onInbox: () => void; onAI: () => void; onFriend: () => void;
+  onBack: () => void; onInbox: () => void; onAI: () => void; onFriend: () => void; poolSize: number;
 }) {
   const cur = SPORTS.find((s) => s.id === sport)!;
-  const ready = sport === 'hockey';
-  const line = ready
-    ? `${gender === 'W' ? "Women's" : "Men's"} ${cur.name} · ranked queues open soon. Play AI any time.`
-    : `${cur.name} Draft Battles are coming soon. Hockey is live now.`;
+  const hockey = sport === 'hockey';
+  // A battle drafts 12 players (6 a side), so it needs at least that many rated athletes.
+  const ready = hockey && poolSize >= 12;
+  const line = !hockey ? `${cur.name} Draft Battles are coming soon. Hockey is live now.`
+    : !ready ? `${gender === 'W' ? "Women's" : "Men's"} Hockey ratings for real U Sports athletes aren’t available yet. Check back soon.`
+    : `${gender === 'W' ? "Women's" : "Men's"} ${cur.name} · ranked queues open soon. Play AI any time.`;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

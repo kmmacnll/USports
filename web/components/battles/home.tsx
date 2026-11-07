@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
 
-import { PI } from './data';
+import type { Player } from './data';
 import { useMe, useRecord } from './me';
 import { BellButton, DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip } from './ui';
 
@@ -48,13 +48,26 @@ function Hero({ tone, chip, title, sub, onClick, href }: {
     : <button type="button" onClick={onClick} className={cls} style={style}>{body}</button>;
 }
 
-export function HomeScreen({ go, leagueCount }: {
-  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'ai') => void; leagueCount: number;
+export function HomeScreen({ go, leagueCount, pool }: {
+  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'ai') => void; leagueCount: number; pool: Player[];
 }) {
   const me = useMe();
   const rec = useRecord();
   const recent = rec.results.slice(-4);
   const leagues = leagueCount === 1 ? '1 league' : `${leagueCount} leagues`;
+  // Discover tiles, all from the real rated pool.
+  const top = pool.slice().sort((a, b) => b.ovr - a.ovr).slice(0, 2);
+  const risers = pool.filter((p) => (p.change ?? 0) > 0).sort((a, b) => b.change! - a.change!).slice(0, 3);
+  const bySchool = new Map<string, { name: string; tint: string; ovrs: number[] }>();
+  for (const p of pool) {
+    const s = bySchool.get(p.schoolName) ?? { name: p.schoolName, tint: p.tint, ovrs: [] };
+    s.ovrs.push(p.ovr); bySchool.set(p.schoolName, s);
+  }
+  // Average of each school's best six (a full lineup), so deep rosters don't win on count alone.
+  const schools = [...bySchool.values()].filter((s) => s.ovrs.length >= 3)
+    .map((s) => { const best = s.ovrs.sort((a, b) => b - a).slice(0, 6); return { ...s, avg: best.reduce((t, v) => t + v, 0) / best.length }; })
+    .sort((a, b) => b.avg - a.avg).slice(0, 3);
+  const none = <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>No ratings yet</span>;
   const [page, setPage] = useState(0);
   const pager = useRef<HTMLDivElement>(null);
   const scrollTo = (k: number) => {
@@ -112,28 +125,32 @@ export function HomeScreen({ go, leagueCount }: {
             chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>SEASON-LONG{leagueCount ? ` · ${leagues.toUpperCase()}` : ''}</span>} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(132px,1fr)', gap: 12, flex: 1, paddingBottom: 6 }}>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
-              {[['Kaplan', 6], ['Fournier', 4], ['Okoro', 3]].map(([n, d]) => (
-                <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700 }}><span>{n}</span><span style={{ color: '#3DD68C' }}>▲ {d}</span></div>
-              ))}
-              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Risers This Week</span>
+              {risers.length ? risers.map((p) => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.last}</span><span style={{ color: '#3DD68C' }}>▲ {p.change}</span>
+                </div>
+              )) : <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>{pool.length ? 'No rating changes yet' : 'No ratings yet'}</span>}
+              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Risers</span>
             </Tile>
             <Tile tone="tile-gold">
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <div style={{ transform: 'rotate(-8deg)', marginRight: -14, opacity: 0.9 }}><PlayerCard p={PI.p17!} size="xs" /></div>
-                <div style={{ position: 'relative', zIndex: 1 }}><PlayerCard p={PI.p1!} size="xs" /></div>
-              </div>
+              {top.length === 2 ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <div style={{ transform: 'rotate(-8deg)', marginRight: -14, opacity: 0.9 }}><PlayerCard p={top[1]!} size="xs" /></div>
+                  <div style={{ position: 'relative', zIndex: 1 }}><PlayerCard p={top[0]!} size="xs" /></div>
+                </div>
+              ) : <Icon name="star" size={44} fill color="#E9B949" />}
               <TileTitle>Top Rated</TileTitle>
-              <TileSub color="#E9B949">Week 45 · 85+ elite</TileSub>
+              <TileSub color="#E9B949">{pool.length ? `${pool.length} rated athletes` : 'No ratings yet'}</TileSub>
             </Tile>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
-              {([['1', 'Harbourview', '#3A7BD5'], ['2', 'Kingsmere', '#8E3B46'], ['3', 'St. Brenna', '#6B4FB8']] as const).map(([r, n, c]) => (
-                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700 }}>
-                  <span style={{ font: `700 14px ${DISPLAY}`, color: r === '1' ? '#E9B949' : '#C3CBDA', width: 10 }}>{r}</span>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
-                  <span style={{ flex: 1 }}>{n}</span>
+              {schools.length ? schools.map((sc, i) => (
+                <div key={sc.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ font: `700 14px ${DISPLAY}`, color: i === 0 ? '#E9B949' : '#C3CBDA', width: 10 }}>{i + 1}</span>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: sc.tint, flex: 'none' }} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name}</span>
                 </div>
-              ))}
-              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Campus Wars</span>
+              )) : none}
+              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Top Schools</span>
             </Tile>
             <Tile tone="tile-gold">
               <Icon name="military_tech" size={52} fill color="#E9B949" style={{ filter: 'drop-shadow(0 0 12px rgba(233,185,73,.45))' }} />

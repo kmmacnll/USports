@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { AI_OPP, simulate, SPORTS, type Match, type SportId } from './data';
+import { AI_OPP, setPool, simulate, SPORTS, type Match, type Player, type SportId } from './data';
 import { DraftScreen } from './draft';
 import { HomeScreen } from './home';
 import { LiveScreen } from './live';
@@ -19,12 +19,18 @@ const LINKABLE = ['home', 'lobby', 'friends', 'inbox', 'ladder'] as const;
  * invites and the ladder need real opponents from the API, so those screens
  * say "coming soon" instead of showing made-up users.
  */
-export function BattlesApp({ displayName, leagueCount }: { displayName: string | null; leagueCount: number }) {
+export function BattlesApp({ displayName, leagueCount, pools }: {
+  displayName: string | null; leagueCount: number; pools: { W: Player[]; M: Player[] };
+}) {
   const me = useMemo(() => battleUser(displayName), [displayName]);
   const [screen, setScreen] = useState<Screen>('home');
   const [sport, setSport] = useState<SportId>('hockey');
   const [gender, setGender] = useState<Gender>('W');
   const [match, setMatch] = useState<Match | null>(null);
+  // Register the real player pool for the chosen division before anything renders.
+  const all = useMemo(() => [...pools.W, ...pools.M], [pools]);
+  setPool(pools[gender], all);
+  const poolSize = pools[gender].length;
 
   // The screen lives in the URL hash so the browser back button and swipe-back work.
   // (Next's router owns history.state, so the hash is the reliable place for it.)
@@ -46,17 +52,17 @@ export function BattlesApp({ displayName, leagueCount }: { displayName: string |
     return () => window.removeEventListener('popstate', read);
   }, []);
 
-  const playAI = () => { setMatch(null); nav('vs'); };
+  const playAI = () => { setMatch(null); nav(poolSize >= 12 ? 'vs' : 'lobby'); };
   const sportName = SPORTS.find((s) => s.id === sport)!.name;
   const genderName = gender === 'W' ? "Women's" : "Men's";
-  const home = <HomeScreen leagueCount={leagueCount} go={(to) => (to === 'ai' ? playAI() : nav(to))} />;
+  const home = <HomeScreen leagueCount={leagueCount} pool={pools.W.length ? pools.W : pools.M} go={(to) => (to === 'ai' ? playAI() : nav(to))} />;
 
   let body: React.ReactNode;
   switch (screen) {
     case 'home': body = home; break;
     case 'lobby':
       body = <LobbyScreen sport={sport} gender={gender} setSport={setSport} setGender={setGender} onBack={back} onInbox={() => nav('inbox')}
-        onAI={playAI} onFriend={() => nav('friends')} />;
+        onAI={playAI} onFriend={() => nav('friends')} poolSize={poolSize} />;
       break;
     case 'friends': body = <FriendsScreen sportName={sportName} genderName={genderName} onBack={back} onAI={playAI} />; break;
     case 'inbox': body = <InboxScreen onBack={back} onPlay={() => nav('lobby', true)} />; break;
@@ -72,7 +78,7 @@ export function BattlesApp({ displayName, leagueCount }: { displayName: string |
       body = match ? <LiveScreen match={match} opp={AI_OPP} onResult={() => { recordResult(match.winner === 'A' ? 'W' : 'L'); nav('result', true); }} /> : null;
       break;
     case 'result':
-      body = match ? <ResultScreen match={match} opp={AI_OPP} onHome={() => nav('home')} onRematch={() => { setMatch(null); nav('vs', true); }} /> : null;
+      body = match ? <ResultScreen match={match} opp={AI_OPP} label={`${genderName} ${sportName}`} onHome={() => nav('home')} onRematch={() => { setMatch(null); nav('vs', true); }} /> : null;
       break;
   }
   // Live and result need a match; after a reload mid-flow, fall back to Home.
