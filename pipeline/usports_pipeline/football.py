@@ -153,8 +153,11 @@ def build_football_lines(frames: dict[str, pd.DataFrame], games: list[GameRecord
                 if m:
                     a.add(fg_bucket(int(m.group(1))), 1)
 
-    for r in frames.get("defence", pd.DataFrame()).to_dict("records"):
-        if a := line_for(r, "player", "team_name", None):
+    defence = frames.get("defence", pd.DataFrame())
+    # The 2026-27 export names the column team_name; 2025-26 calls it team.
+    defence_team_col = "team_name" if "team_name" in defence.columns else "team"
+    for r in defence.to_dict("records"):
+        if a := line_for(r, "player", defence_team_col, None):
             for col, k in DEFENCE.items():
                 a.add(k, r.get(col))
             if not a.jersey:
