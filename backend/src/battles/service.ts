@@ -222,10 +222,6 @@ export class BattleService {
       await this.assertFree(client, input.userB, 'Your opponent is', { allowQueued: input.fromQueue });
     }
     await this.assertPool(client, input.sportCode);
-    // Same T&C rule as leagues: terms accepted, and an athlete can't play their own sport.
-    for (const u of [input.userA, input.state === 'drafting' ? input.userB : null]) {
-      if (u) await client.query('SELECT assert_user_may_play_sport($1, (SELECT id FROM sports WHERE code = $2))', [u, input.sportCode]);
-    }
     const { rows } = await client.query<{ id: string }>(
       `INSERT INTO battles (mode, ranked, sport_id, state, user_a, user_b)
        SELECT $1::battle_mode, $1::battle_mode = 'RANDOM', s.id, 'queued', $3, $4 FROM sports s WHERE s.code = $2 RETURNING id`,

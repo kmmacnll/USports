@@ -16,10 +16,10 @@ db/
 │   ├── 0007_player_ratings.{up,down}.sql  # Draft Battles: rating_runs, player_ratings, player_rating_history
 │   ├── 0008_battles.{up,down}.sql         # battles (state machine), battle_picks (rating snapshots)
 │   ├── 0009_matchmaking.{up,down}.sql     # users.username, battle_profiles, battle_invites, notifications, battle_queue
-│   └── 0010_ladder.{up,down}.sql          # Elo per battle, ladder_cohorts, ladder_memberships, ladder_resets
+│   ├── 0010_ladder.{up,down}.sql          # Elo per battle, ladder_cohorts, ladder_memberships, ladder_resets
+│   └── 0011_remove_terms_and_unused.{up,down}.sql  # drops T&C + athlete eligibility and never-used columns
 ├── seeds/                             # idempotent reference data
 │   ├── 0001_sports.sql
-│   ├── 0002_terms.sql
 │   └── 0003_default_competitions.sql
 └── tests/schema_smoke_test.sql        # checks every rule below with synthetic rows, then rolls back
 ```
@@ -47,7 +47,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/schema_smoke_test.sql
  FANTASY (API writes)
    game_stat_fantasy_points ◄── competitions (sport+season+ruleset) ──► sports
                                      ▲
-   users ── user_athlete_declarations   leagues (roster_limits_json override)
+   users                                leagues (roster_limits_json override)
      ▲                                     ▲
      └──────── fantasy_teams ──────────────┘
                     ▲
@@ -129,9 +129,6 @@ A roster row is (`position_assigned`, `slot_index`): for example `('PG',1)` or
 | Rule | Mechanism |
 |---|---|
 | Re-ingesting never duplicates data | upsert keys: `universities.slug`, `games (sport_id, source_game_id)`, `game_stats (athlete_id, game_id)`, `athlete_source_ids` PK |
-| **T&C:** a user must accept the current terms (and answer the athlete question) before commissioning or joining a league | `assert_user_may_play_sport()`, hint `TERMS_NOT_ACCEPTED` |
-| **T&C:** a U Sports athlete can play every sport except their own | `user_athlete_declarations` + `assert_user_may_play_sport()` on `leagues` and `fantasy_teams`, hint `ATHLETE_OWN_SPORT` |
-| A user can't declare a sport while still in a league for it | `user_athlete_declarations` trigger |
 | One team per user per league; at most `max_teams` teams | unique constraint + trigger (`LEAGUE_FULL`) |
 | League roster limits are well-formed and use only slots the competition defines | CHECK constraints + `leagues` trigger |
 | An athlete is rostered at most once per league | `UNIQUE (league_id, athlete_id)`, with `league_id` pinned by a composite FK |

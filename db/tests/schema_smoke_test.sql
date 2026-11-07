@@ -77,33 +77,10 @@ DO $$ BEGIN
            WHERE a.last_name = 'Point') = 26.00, 'season view fantasy avg wrong';
 END $$;
 
--- ---------------------------------------------------------------- users & terms
+-- ---------------------------------------------------------------- users
 INSERT INTO users (auth_subject, display_name) VALUES
   ('zz-commish', 'Commish'), ('zz-rival', 'Rival'), ('zz-late', 'Late'),
   ('zz-mbk-athlete', 'Hooper'), ('zz-no-terms', 'Skipper');
-UPDATE users SET terms_version_accepted = (SELECT version FROM terms_versions WHERE is_current),
-                 terms_accepted_at = now(), is_usports_athlete = FALSE
- WHERE auth_subject LIKE 'zz-%' AND auth_subject <> 'zz-no-terms';
-
--- Accepting terms requires answering the athlete question.
-SELECT pg_temp.expect_error($q$
-  UPDATE users SET terms_version_accepted = (SELECT version FROM terms_versions WHERE is_current),
-                   terms_accepted_at = now(), is_usports_athlete = NULL
-   WHERE auth_subject = 'zz-no-terms'$q$, '23514');
-
--- The MBK athlete declares their sport.
-INSERT INTO user_athlete_declarations (user_id, sport_id, university_id)
-SELECT u.id, s.id, un.id FROM users u, sports s, universities un
- WHERE u.auth_subject = 'zz-mbk-athlete' AND s.code = 'usports_mbk' AND un.slug = 'zz-test-a';
-DO $$ BEGIN
-  ASSERT (SELECT is_usports_athlete FROM users WHERE auth_subject = 'zz-mbk-athlete'), 'declaration did not flag user';
-END $$;
-
--- A declaration's athlete must play the declared sport.
-SELECT pg_temp.expect_error($q$
-  INSERT INTO user_athlete_declarations (user_id, sport_id, athlete_id)
-  SELECT u.id, s.id, a.id FROM users u, sports s, athletes a
-   WHERE u.auth_subject = 'zz-rival' AND s.code = 'usports_wbk' AND a.last_name = 'Point'$q$, '23514');
 
 -- ---------------------------------------------------------------- leagues
 -- Defaults: roster limits + size copied from the competition.
@@ -143,31 +120,14 @@ SELECT pg_temp.expect_error($q$
   SELECT c.id, u.id, 'Bad Slot', '{"QB":1,"GOALIE":1}'
     FROM competitions c, users u WHERE c.code = 'usports_football_half_ppr' AND u.auth_subject = 'zz-commish'$q$, '23514');
 
--- Terms must be accepted to commission or join.
-SELECT pg_temp.expect_error($q$
-  INSERT INTO leagues (competition_id, commissioner_id, name)
-  SELECT c.id, u.id, 'No Terms' FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
-   WHERE s.code = 'usports_mbk' AND c.is_default AND u.auth_subject = 'zz-no-terms'$q$, '23514', 'TERMS_NOT_ACCEPTED');
-
--- T&C §Athlete Eligibility: the MBK athlete can't commission or join MBK...
-SELECT pg_temp.expect_error($q$
-  INSERT INTO leagues (competition_id, commissioner_id, name)
-  SELECT c.id, u.id, 'Own Sport' FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
-   WHERE s.code = 'usports_mbk' AND c.is_default AND u.auth_subject = 'zz-mbk-athlete'$q$, '23514', 'ATHLETE_OWN_SPORT');
-SELECT pg_temp.expect_error($q$
-  INSERT INTO fantasy_teams (league_id, user_id, team_name)
-  SELECT l.id, u.id, 'Hooper FC' FROM leagues l, users u
-   WHERE l.name = 'ZZ Hoops' AND u.auth_subject = 'zz-mbk-athlete'$q$, '23514', 'ATHLETE_OWN_SPORT');
--- ...but can join any other sport.
+-- No terms or athlete-eligibility step: a brand-new user can commission a
+-- league in any sport, and anyone can join any league with room.
+INSERT INTO leagues (competition_id, commissioner_id, name)
+SELECT c.id, u.id, 'No Terms' FROM competitions c JOIN sports s ON s.id = c.sport_id, users u
+ WHERE s.code = 'usports_mbk' AND c.is_default AND u.auth_subject = 'zz-no-terms';
 INSERT INTO fantasy_teams (league_id, user_id, team_name)
 SELECT l.id, u.id, 'Hooper Plays Football' FROM leagues l, users u
  WHERE l.name = 'Vanier Cup Chasers' AND u.auth_subject = 'zz-mbk-athlete';
-
--- Declaring a sport while already in a league for it is rejected.
-SELECT pg_temp.expect_error($q$
-  INSERT INTO user_athlete_declarations (user_id, sport_id)
-  SELECT u.id, s.id FROM users u, sports s WHERE u.auth_subject = 'zz-commish' AND s.code = 'usports_fb'$q$,
-  '23514', 'ATHLETE_OWN_SPORT');
 
 -- ---------------------------------------------------------------- teams & capacity
 INSERT INTO fantasy_teams (league_id, user_id, team_name)

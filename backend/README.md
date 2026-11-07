@@ -28,8 +28,7 @@ For safety, the test database name must contain "test".
 | GET | `/athletes?sport_id=usports_mhk` | – | Search athletes with season stats. Filters: `university` (slug or id), `q` (name prefix), `position` (matches the slot's eligibility, e.g. hockey `F` = C/LW/RW), `conference`, `season`. Also `sort=fantasy_points\|name`, `page`, `page_size` (≤100). `sport` is accepted as an alias for `sport_id` |
 | POST | `/auth/signup` | – | `{ name, email, password, password_confirmation, university? }` → creates the account. `name` (2-40 chars) is the display name; `university` is an optional slug from `/universities` (password hashed with scrypt in `users.password_hash`) and returns a 30-day bearer token. Passwords are 8-128 characters. 409 `EMAIL_TAKEN` if the email exists |
 | POST | `/auth/login` | – | `{ email, password }` → a 30-day bearer token. Failed attempts are rate limited (10 per address per 15 min). Both need `JWT_SECRET` |
-| GET | `/me` | ✓ | Profile (incl. `university`), terms status, declared athlete sports, teams |
-| PUT | `/me/terms` | ✓ | Accept the current T&C and answer the U Sports athlete question |
+| GET | `/me` | ✓ | Profile (incl. `university`) and teams |
 | POST | `/leagues` | ✓ | Create a league. Optional `ruleset_id` (defaults to the sport's default ruleset), `roster_limits` and `roster_size`. Optional `team_name` also creates the commissioner's team |
 | GET | `/leagues/:id` | ✓ | League details (private leagues: members only) |
 | POST | `/leagues/:id/teams` | ✓ | Join with `team_name`. Private leagues also need `invite_code` |
@@ -150,8 +149,8 @@ out). Deadlines live in the database and a 1 s tick acts on them, so a
 restart loses nothing: overdue picks are auto-picked, finished matches
 completed and running streams resumed. A user is busy (409 `ALREADY_IN_BATTLE`
 / `ALREADY_QUEUED`) while drafting or simulating, while an invite they sent is
-pending, or while in the ranked queue. Battles need accepted terms and follow
-the athlete rule, like leagues.
+pending, or while in the ranked queue.
+Anyone signed in can play; there is no terms or athlete-eligibility step.
 
 ### Endpoints
 
@@ -235,9 +234,9 @@ Every error is returned as `{ "error": { "code", "message", "details?" } }`.
 |---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_ID`, `NO_CHANGE` |
 | 401 | `UNAUTHENTICATED`, `INVALID_TOKEN` |
-| 403 | `NOT_IN_BATTLE`, `TERMS_NOT_ACCEPTED`, `ATHLETE_OWN_SPORT` |
+| 403 | `NOT_IN_BATTLE` |
 | 404 | `USER_NOT_FOUND`, `NOT_QUEUED`, `NOT_FOUND`, `NO_TEAM`, `NOT_ON_ROSTER`, `UNKNOWN_SPORT`, `ROUTE_NOT_FOUND` |
-| 409 | `ALREADY_IN_BATTLE`, `ALREADY_QUEUED`, `NOT_YOUR_TURN`, `ALREADY_PICKED`, `DRAFT_NOT_ACTIVE`, `INVITE_NOT_PENDING`, `USERNAME_TAKEN`, `RANKED_NO_FORFEIT`, `LEAGUE_FULL`, `ALREADY_IN_LEAGUE`, `TEAM_NAME_TAKEN`, `ATHLETE_ALREADY_ROSTERED`, `SLOT_OCCUPIED`, `ROSTER_FULL`, `TERMS_VERSION_MISMATCH`, `ATHLETE_DECLARATION_LOCKED` |
+| 409 | `ALREADY_IN_BATTLE`, `ALREADY_QUEUED`, `NOT_YOUR_TURN`, `ALREADY_PICKED`, `DRAFT_NOT_ACTIVE`, `INVITE_NOT_PENDING`, `USERNAME_TAKEN`, `RANKED_NO_FORFEIT`, `LEAGUE_FULL`, `ALREADY_IN_LEAGUE`, `TEAM_NAME_TAKEN`, `ATHLETE_ALREADY_ROSTERED`, `SLOT_OCCUPIED`, `ROSTER_FULL` |
 | 410 | `INVITE_EXPIRED` |
 | 422 | `NO_OPEN_SLOT`, `NOT_IN_POOL`, `POOL_TOO_SMALL`, `CANNOT_INVITE_SELF`, `UNKNOWN_POSITION`, `INVALID_SLOT`, `INELIGIBLE_POSITION`, `WRONG_SPORT`, `ROSTER_SIZE_MISMATCH`, `SPORT_INACTIVE`, `NO_RULESET`, `UNKNOWN_RULESET`, `ATHLETE_SPORTS_REQUIRED`, `CONSTRAINT_VIOLATION` |
 

@@ -28,11 +28,10 @@ export async function wipeFakeData(db: Db | pg.PoolClient): Promise<void> {
 /** Two local users for trying Play a Friend / Play Random with the X-Dev-User header. */
 export async function seedDevUsers(db: Db) {
   await db.query(
-    `INSERT INTO users (auth_subject, display_name, username, terms_version_accepted, terms_accepted_at, is_usports_athlete)
-     SELECT v.sub, v.name, v.username, (SELECT version FROM terms_versions WHERE is_current), now(), FALSE
+    `INSERT INTO users (auth_subject, display_name, username)
+     SELECT v.sub, v.name, v.username
        FROM (VALUES ('dev-alice', 'Alice (dev)', 'dev_alice'), ('dev-bob', 'Bob (dev)', 'dev_bob')) v(sub, name, username)
-     ON CONFLICT (auth_subject) DO UPDATE SET username = EXCLUDED.username,
-       terms_version_accepted = EXCLUDED.terms_version_accepted, terms_accepted_at = now()`);
+     ON CONFLICT (auth_subject) DO UPDATE SET username = EXCLUDED.username`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -45,7 +44,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     await wipeFakeData(db);
     console.log('✓ removed any fictional dev schools and athletes');
     await seedDevUsers(db);
-    console.log('✓ dev users: X-Dev-User: dev-alice (username dev_alice) and dev-bob (dev_bob), terms accepted');
+    console.log('✓ dev users: X-Dev-User: dev-alice (username dev_alice) and dev-bob (dev_bob)');
     console.log('→ recomputing ratings');
     console.log(JSON.stringify(await recomputeRatings(db, { force: true }), null, 2));
   })().then(() => db.end(), (err) => { console.error(err); process.exit(1); });
