@@ -124,6 +124,15 @@ verified against final scores); or the team name matched to the schedule.
   - an athlete listed twice in one game (hockey goalies, in both the skater
     and goalie tables) is merged into one line;
   - dates exported as day counts (`20684`) are converted.
+- **Games missing from the schedule** are rebuilt from their box scores
+  (`rebuild.py`): teams from `team`/`team_name` + `team_status` (championship
+  seeds like "(8) Guelph" stripped), the date from the game id, playoff from
+  the player links' season segment, exhibition if dated before the season's
+  first conference game. Soccer scores come from each side's keepers' goals
+  against; other sports keep NULL scores. Only games between teams already in
+  this season's schedule (at least one a member) are rebuilt. The run summary
+  reports `games_rebuilt` and `games_unresolved`. In 2025-26 this restored 69
+  games (7 football, 28 men's and 34 women's soccer) and about 2,100 stat lines.
 
 ### Derived, not hard-coded
 - **U Sports membership:** a team is a member if it plays at least one conference
