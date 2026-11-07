@@ -8,7 +8,8 @@ export type Side = 'A' | 'B';
 
 export interface Rating { l: string; v: number }
 export interface Player {
-  id: string; first: string; last: string; school: string; schoolName: string; pos: Pos;
+  /** logo: /logos/<school slug>.png when that file exists in web/public/logos, else null. */
+  id: string; first: string; last: string; school: string; schoolName: string; logo: string | null; pos: Pos;
   ovr: number; num: string; isNew: boolean; change: number | null; tint: string; ratings: Rating[];
 }
 
@@ -31,10 +32,12 @@ export function schoolCode(name: string) {
   return (words[0] ?? n).replace(/[^\p{L}]/gu, '').slice(0, 3).toUpperCase();
 }
 
-export function fromApi(a: ApiPlayer): Player | null {
+/** `logos` holds the school slugs that have a PNG in web/public/logos (see app/page.tsx). */
+export function fromApi(a: ApiPlayer, logos: ReadonlySet<string> = new Set()): Player | null {
   if (a.position !== 'F' && a.position !== 'D' && a.position !== 'G') return null;
   return {
     id: a.athlete_id, first: a.first_name, last: a.last_name, school: schoolCode(a.school), schoolName: a.school,
+    logo: logos.has(a.school_id) ? `/logos/${encodeURIComponent(a.school_id)}.png` : null,
     pos: a.position, ovr: a.ovr, num: a.jersey_number ?? '', isNew: a.is_new, change: a.ovr_change,
     tint: TINTS[hash(a.school_id) % TINTS.length]!,
     ratings: Object.entries(a.sub_ratings).map(([l, v]) => ({ l, v })),

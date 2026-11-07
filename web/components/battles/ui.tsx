@@ -30,6 +30,14 @@ const XS_CLIP = 'polygon(0 0,74% 0,100% 16%,100% 87%,50% 100%,0 87%)';
 const XS_CLIP_IN = 'polygon(0 0,73% 0,100% 15%,100% 87%,50% 100%,0 87%)';
 export const EMPTY_SLOT_CLIP = XS_CLIP;
 
+/** A school's logo as a small PNG icon (decorative: the school code is always shown as text too). */
+export function SchoolLogo({ src, size, style }: { src: string | null; size: number; style?: CSSProperties }) {
+  if (!src) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt="" aria-hidden width={size} height={size} loading="lazy" decoding="async"
+    style={{ width: size, height: size, objectFit: 'contain', flex: 'none', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.55))', ...style }} />;
+}
+
 export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, dim }: {
   p: Player; size?: 'lg' | 'md' | 'xs' | 'row'; actionLabel?: string; onAction?: () => void; disabled?: boolean; dim?: boolean;
 }) {
@@ -49,7 +57,9 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
           <span style={{ position: 'absolute', top: 20, left: 5, font: `800 8px ${DISPLAY}`, letterSpacing: '.1em' }}>{p.pos}</span>
           <span style={{ position: 'absolute', top: 24, right: 5, font: `italic 900 13px ${DISPLAY}`, color: 'rgba(242,244,248,.55)' }}>{initials}</span>
           <span style={{ position: 'absolute', top: 40, left: 2, right: 2, textAlign: 'center', font: `700 8.5px/1 ${DISPLAY}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.last.toUpperCase()}</span>
-          <span style={{ position: 'absolute', top: 50, left: 0, right: 0, textAlign: 'center', fontSize: 6.5, fontWeight: 800, color: '#C3CBDA' }}>{p.school}</span>
+          <span style={{ position: 'absolute', top: 49, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, fontSize: 6.5, fontWeight: 800, color: '#C3CBDA' }}>
+            <SchoolLogo src={p.logo} size={9} />{p.school}
+          </span>
         </div>
       </div>
     );
@@ -70,7 +80,7 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.first[0]}. {p.last}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, color: '#93A0B8' }}>
-            {p.school} · #{p.num}
+            <SchoolLogo src={p.logo} size={14} />{p.school} · #{p.num}
             {p.isNew && <span style={{ padding: '1px 4px', borderRadius: 4, background: '#E9B949', color: '#2A1C02', fontSize: 8, fontWeight: 800 }}>NEW</span>}
           </span>
         </div>
@@ -101,6 +111,7 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
         <div style={{ position: 'absolute', inset: 0, clipPath: CARD_CLIP, background: T.f }} />
         <div style={{ position: 'absolute', inset: 3, clipPath: CARD_CLIP_IN, background: panel, overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0 1px,transparent 1px 9px)' }} />
+          {p.logo && <SchoolLogo src={p.logo} size={118} style={{ position: 'absolute', top: 14, left: 16, opacity: 0.11, filter: 'grayscale(.2)' }} />}
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(115deg,transparent 36%,rgba(255,255,255,.09) 47%,transparent 58%)' }} />
           <div style={{ position: 'absolute', top: 9, left: 11, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             <span style={{ font: `italic 800 34px/0.9 ${DISPLAY}`, color: T.ink, letterSpacing: '-.01em' }}>{p.ovr}</span>
@@ -115,7 +126,9 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
           <div style={{ position: 'absolute', top: 106, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
             <span style={{ fontSize: 9.5, fontWeight: 700, color: '#C3CBDA' }}>{p.first}</span>
             <span style={{ font: `700 19px/1 ${DISPLAY}`, letterSpacing: '.03em' }}>{p.last.toUpperCase()}</span>
-            <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', color: '#C3CBDA', marginTop: 2 }}>{p.school} · #{p.num}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', color: '#C3CBDA', marginTop: 2 }}>
+              <SchoolLogo src={p.logo} size={16} />{p.school} · #{p.num}
+            </span>
           </div>
           <div style={{ position: 'absolute', top: 152, left: 10, right: 10, height: 1, background: 'rgba(255,255,255,.14)' }} />
           <div style={{ position: 'absolute', top: 157, left: 8, right: 8, display: 'grid', gridTemplateColumns: 'repeat(5,1fr)' }}>

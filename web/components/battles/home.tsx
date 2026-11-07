@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
 
 import type { Player } from './data';
+import type { MyLeague } from './leagues';
 import { useMe, useRecord } from './me';
-import { BellButton, DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip } from './ui';
+import { BellButton, DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip, SchoolLogo } from './ui';
 
 const PAGES = ['Play', 'Discover', 'Profile'] as const;
 
@@ -48,8 +49,8 @@ function Hero({ tone, chip, title, sub, onClick, href }: {
     : <button type="button" onClick={onClick} className={cls} style={style}>{body}</button>;
 }
 
-export function HomeScreen({ go, pool }: {
-  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'ai') => void; pool: Player[];
+export function HomeScreen({ go, pool, leagues }: {
+  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'leagues' | 'ai') => void; pool: Player[]; leagues: MyLeague[];
 }) {
   const me = useMe();
   const rec = useRecord();
@@ -57,9 +58,9 @@ export function HomeScreen({ go, pool }: {
   // Discover tiles, all from the real rated pool.
   const top = pool.slice().sort((a, b) => b.ovr - a.ovr).slice(0, 2);
   const risers = pool.filter((p) => (p.change ?? 0) > 0).sort((a, b) => b.change! - a.change!).slice(0, 3);
-  const bySchool = new Map<string, { name: string; tint: string; ovrs: number[] }>();
+  const bySchool = new Map<string, { name: string; tint: string; logo: string | null; ovrs: number[] }>();
   for (const p of pool) {
-    const s = bySchool.get(p.schoolName) ?? { name: p.schoolName, tint: p.tint, ovrs: [] };
+    const s = bySchool.get(p.schoolName) ?? { name: p.schoolName, tint: p.tint, logo: p.logo, ovrs: [] };
     s.ovrs.push(p.ovr); bySchool.set(p.schoolName, s);
   }
   // Average of each school's best six (a full lineup), so deep rosters don't win on count alone.
@@ -120,9 +121,9 @@ export function HomeScreen({ go, pool }: {
 
         {/* PAGE 2 · DISCOVER */}
         <section aria-label="Discover" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
-          <Hero tone="blue" onClick={() => go('lobby')} title={['Real', 'Players']}
-            sub={pool.length ? `${pool.length} rated U Sports athletes · Draft them now` : 'Ratings for real U Sports athletes are on the way'}
-            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>U SPORTS · RATED</span>} />
+          <Hero tone="blue" onClick={() => go('leagues')} title={['My', 'Leagues']}
+            sub={leagues.length ? `${leagues.length === 1 ? '1 league' : `${leagues.length} leagues`} · ${leagues[0]!.name}${leagues[0]!.rank ? ` #${leagues[0]!.rank}` : ''}` : 'Season-long fantasy leagues'}
+            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>SEASON-LONG</span>} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(132px,1fr)', gap: 12, flex: 1, paddingBottom: 6 }}>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
               {risers.length ? risers.map((p) => (
@@ -146,7 +147,7 @@ export function HomeScreen({ go, pool }: {
               {schools.length ? schools.map((sc, i) => (
                 <div key={sc.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700 }}>
                   <span style={{ font: `700 14px ${DISPLAY}`, color: i === 0 ? '#E9B949' : '#C3CBDA', width: 10 }}>{i + 1}</span>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: sc.tint, flex: 'none' }} />
+                  {sc.logo ? <SchoolLogo src={sc.logo} size={16} /> : <span style={{ width: 8, height: 8, borderRadius: 2, background: sc.tint, flex: 'none' }} />}
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name}</span>
                 </div>
               )) : none}

@@ -55,6 +55,18 @@ Built from the "Draft Battles" Claude Design handoff. Everything lives in
   works. Battle screens need in-memory state and fall back to Home on reload.
 - Fonts (Manrope, Barlow Condensed, Material Symbols Rounded) load from Google
   Fonts in `app/layout.tsx`.
+- `leagues.tsx`: My Leagues, your season-long fantasy leagues (team, rank,
+  roster points, roster fill), loaded by `app/page.tsx` from `/me`,
+  `/leagues/:id` and `/leagues/:id/teams`. Rosters, lineups and the league
+  draft inside Battles are next.
+- School logos: put one transparent PNG per school in `public/logos/`, named
+  after the school's slug (the API's `school_id`, i.e. `universities.slug`),
+  e.g. `public/logos/laval.png`, square, at least 128×128. `app/page.tsx` lists
+  the folder, so only schools with a file get a logo: a 16px icon next to the
+  school code on full cards (plus a faint watermark), 14px on list rows, 9px on
+  mini cards, and on the Top Schools tile. Schools without a file keep the text
+  code. University athletics logos are trademarks: get each school's permission
+  before adding its file.
 - `me.tsx`: the signed-in user (display name from `/me`, passed in by
   `app/page.tsx`) and your battle record, which is stored in
   `localStorage` (`vhq.battles.record`) until the UI talks to the API.
