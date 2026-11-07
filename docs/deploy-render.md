@@ -51,7 +51,7 @@ Render then:
 - builds the API (`npm ci --include=dev && npm run build`);
 - starts the API with `npm start`. The server opens its port immediately,
   then (because `MIGRATE_ON_START=true`) creates the schema and loads the
-  sports, terms and rulesets. It answers `503 starting` until that finishes.
+  sports and rulesets. It answers `503 starting` until that finishes.
   On a brand-new Blueprint it waits up to 3 minutes for the database to become
   reachable. If it fails, the process exits and the old version keeps running;
 - waits for `GET /healthz` to return 200;
@@ -153,11 +153,6 @@ from the generated secret:
    ```bash
    TOKEN=paste-token-here
    API=https://varsityhq-api.onrender.com/api/v1
-   ```
-
-   ```bash
-   curl -X PUT $API/me/terms -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-     -d '{"terms_version":"2026-11-01","is_usports_athlete":false}'
    ```
 
    ```bash

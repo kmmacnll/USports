@@ -19,10 +19,9 @@ let clock = Date.now();
 const as = (s: string) => ({ 'X-Dev-User': s });
 const advance = (ms: number) => { clock += ms; };
 
-export async function acceptTerms(a: ReturnType<typeof createApp>, subject: string) {
-  const me = await request(a).get('/api/v1/me').set(as(subject)).expect(200);
-  await request(a).put('/api/v1/me/terms').set(as(subject))
-    .send({ terms_version: me.body.terms.current_version, is_usports_athlete: false }).expect(200);
+/** Signs the user in once, which creates their account. */
+export async function ensureUser(a: ReturnType<typeof createApp>, subject: string) {
+  await request(a).get('/api/v1/me').set(as(subject)).expect(200);
 }
 
 beforeAll(() => {
@@ -94,7 +93,7 @@ async function draftToEnd(subject: string, id: string) {
 
 describe('Play AI: draft -> simulate -> complete', () => {
   it('runs a whole battle', async () => {
-    await acceptTerms(app, 'ai-player');
+    await ensureUser(app, 'ai-player');
     const created = await request(app).post('/api/v1/battles/ai').set(as('ai-player')).send({ sport: 'hockey', gender: 'men' }).expect(201);
     const id = created.body.battle_id;
     expect(created.body).toMatchObject({ mode: 'AI', ranked: false, state: 'drafting', you: 'A', sport: 'hockey', gender: 'MEN',
@@ -174,7 +173,7 @@ describe('Play AI: draft -> simulate -> complete', () => {
   }, 60_000);
 
   it('auto-picks the best available eligible player when the 20 s timer runs out', async () => {
-    await acceptTerms(app, 'slowpoke');
+    await ensureUser(app, 'slowpoke');
     const created = await request(app).post('/api/v1/battles/ai').set(as('slowpoke')).send({ sport: 'football' }).expect(201);
     const id = created.body.battle_id;
     let v = created.body;
@@ -196,13 +195,13 @@ describe('Play AI: draft -> simulate -> complete', () => {
     await request(app).post(`/api/v1/battles/${id}/forfeit`).set(as('slowpoke')).expect(200);
   });
 
-  it('other users cannot see or pick in a battle; T&C are required', async () => {
-    await acceptTerms(app, 'owner');
+  it('other users cannot see or pick in a battle; no terms step to start one', async () => {
+    await ensureUser(app, 'owner');
     const created = await request(app).post('/api/v1/battles/ai').set(as('owner')).send({ sport: 'soccer', gender: 'women' }).expect(201);
     expect((await request(app).get(`/api/v1/battles/${created.body.battle_id}`).set(as('stranger')).expect(403)).body.error.code).toBe('NOT_IN_BATTLE');
-    const noTerms = await request(app).post('/api/v1/battles/ai').set(as('stranger')).send({ sport: 'soccer', gender: 'women' }).expect(403);
-    expect(noTerms.body.error.code).toBe('TERMS_NOT_ACCEPTED');
     await request(app).post(`/api/v1/battles/${created.body.battle_id}/forfeit`).set(as('owner')).expect(200);
+    const fresh = await request(app).post('/api/v1/battles/ai').set(as('stranger')).send({ sport: 'soccer', gender: 'women' }).expect(201);
+    await request(app).post(`/api/v1/battles/${fresh.body.battle_id}/forfeit`).set(as('stranger')).expect(200);
   });
 });
 
@@ -216,7 +215,7 @@ describe('realtime', () => {
     live.hub.attach(server, (s) => provisionSubject(db, s));
     const port = (server.address() as AddressInfo).port;
     try {
-      await acceptTerms(liveApp, 'ws-player');
+      await ensureUser(liveApp, 'ws-player');
       // tickets: unauthenticated connections are refused
       await expect(new Promise((res, rej) => {
         const w = new WebSocket(`ws://127.0.0.1:${port}/api/v1/realtime?ticket=nope`);

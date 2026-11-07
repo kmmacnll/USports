@@ -16,10 +16,6 @@ const advance = (ms: number) => { clock += ms; };
 
 async function user(subject: string): Promise<string> {
   const me = await request(app).get('/api/v1/me').set(as(subject)).expect(200);
-  if (me.body.terms.needs_acceptance) {
-    await request(app).put('/api/v1/me/terms').set(as(subject))
-      .send({ terms_version: me.body.terms.current_version, is_usports_athlete: false }).expect(200);
-  }
   return me.body.user_id.slice(4);
 }
 

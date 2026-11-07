@@ -1,11 +1,11 @@
 /**
- * Fake U SPORTS-shaped data for local development and tests: fictional
+ * Test fixtures only: fake U SPORTS-shaped data with fictional
  * universities, athletes and two seasons of box scores for every battle sport,
  * using the same canonical stat keys the pipeline writes. Every athlete has a
  * hidden talent z ~ N(0,1) that drives their stats, so ratings can be checked
  * against it. Deterministic for a given seed.
  */
-import { createRng, type Rng } from '../rng.js';
+import { createRng, type Rng } from '../src/battles/rng.js';
 
 export interface FakeAthlete {
   key: string;

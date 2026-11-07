@@ -209,7 +209,6 @@ export class Matchmaking {
         await this.battles.lockUsers(client, [i.from_user, i.to_user]);
         await this.battles.assertFree(client, userId, 'You are', { except: i.battle_id });
         await this.battles.assertFree(client, i.from_user, 'Your friend is', { except: i.battle_id });
-        await client.query('SELECT assert_user_may_play_sport($1, (SELECT sport_id FROM battles WHERE id = $2))', [userId, i.battle_id]);
         await client.query(`UPDATE battle_invites SET status = 'accepted', responded_at = $2 WHERE id = $1`, [i.id, this.now()]);
         await this.battles.startDraftTx(client, outbox, i.battle_id);
       } else {
@@ -298,7 +297,6 @@ export class Matchmaking {
       await this.battles.lockUsers(client, [userId]);
       await this.battles.assertFree(client, userId);
       const { rows: [s] } = await client.query<{ id: number }>('SELECT id FROM sports WHERE code = $1', [sportCode]);
-      await client.query('SELECT assert_user_may_play_sport($1, $2)', [userId, s!.id]);
       await this.battles.assertPool(client, sportCode);
       const p = await this.ensureProfile(client, userId);
       await client.query('INSERT INTO battle_queue (user_id, sport_id, division, elo, enqueued_at) VALUES ($1, $2, $3, $4, $5)',

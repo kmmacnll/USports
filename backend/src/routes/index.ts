@@ -9,7 +9,7 @@ import { listGames, listUniversities } from '../services/reference.js';
 import {
   addToRoster, availableAthletes, createLeague, dropFromRoster, getLeague, getRoster, joinLeague, listTeams, swap,
 } from '../services/leagues.js';
-import { acceptTerms, getMe } from '../services/me.js';
+import { getMe } from '../services/me.js';
 import { listSports } from '../services/sports.js';
 
 const sportCode = z.string({ error: 'sport_id is required, e.g. usports_mhk' })
@@ -91,12 +91,6 @@ const AddBody = z.object({
   slot_index: z.number().int().min(1).max(15).optional(),
 });
 
-const TermsBody = z.object({
-  terms_version: z.string().min(1).max(32),
-  is_usports_athlete: z.boolean(),
-  athlete_sports: z.array(sportCode).max(5).default([]),
-});
-
 /** Public reference data: no login needed. */
 export function publicRouter(db: Db): Router {
   const r = Router();
@@ -142,10 +136,6 @@ export function apiRouter(db: Db): Router {
   // ---- current user
   r.get('/me', async (req, res) => {
     res.json(await getMe(db, requireUser(req).id));
-  });
-
-  r.put('/me/terms', async (req, res) => {
-    res.json(await acceptTerms(db, requireUser(req).id, TermsBody.parse(req.body)));
   });
 
   // ---- leagues

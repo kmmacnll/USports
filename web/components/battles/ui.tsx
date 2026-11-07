@@ -30,6 +30,14 @@ const XS_CLIP = 'polygon(0 0,74% 0,100% 16%,100% 87%,50% 100%,0 87%)';
 const XS_CLIP_IN = 'polygon(0 0,73% 0,100% 15%,100% 87%,50% 100%,0 87%)';
 export const EMPTY_SLOT_CLIP = XS_CLIP;
 
+/** A school's logo as a small PNG icon (decorative: the school code is always shown as text too). */
+export function SchoolLogo({ src, size, style }: { src: string | null; size: number; style?: CSSProperties }) {
+  if (!src) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt="" aria-hidden width={size} height={size} loading="lazy" decoding="async"
+    style={{ width: size, height: size, objectFit: 'contain', flex: 'none', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.55))', ...style }} />;
+}
+
 export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, dim }: {
   p: Player; size?: 'lg' | 'md' | 'xs' | 'row'; actionLabel?: string; onAction?: () => void; disabled?: boolean; dim?: boolean;
 }) {
@@ -49,7 +57,9 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
           <span style={{ position: 'absolute', top: 20, left: 5, font: `800 8px ${DISPLAY}`, letterSpacing: '.1em' }}>{p.pos}</span>
           <span style={{ position: 'absolute', top: 24, right: 5, font: `italic 900 13px ${DISPLAY}`, color: 'rgba(242,244,248,.55)' }}>{initials}</span>
           <span style={{ position: 'absolute', top: 40, left: 2, right: 2, textAlign: 'center', font: `700 8.5px/1 ${DISPLAY}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.last.toUpperCase()}</span>
-          <span style={{ position: 'absolute', top: 50, left: 0, right: 0, textAlign: 'center', fontSize: 6.5, fontWeight: 800, color: '#C3CBDA' }}>{p.school}</span>
+          <span style={{ position: 'absolute', top: 49, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, fontSize: 6.5, fontWeight: 800, color: '#C3CBDA' }}>
+            <SchoolLogo src={p.logo} size={9} />{p.school}
+          </span>
         </div>
       </div>
     );
@@ -70,7 +80,7 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.first[0]}. {p.last}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, color: '#93A0B8' }}>
-            {p.school} · #{p.num}
+            <SchoolLogo src={p.logo} size={14} />{p.school} · #{p.num}
             {p.isNew && <span style={{ padding: '1px 4px', borderRadius: 4, background: '#E9B949', color: '#2A1C02', fontSize: 8, fontWeight: 800 }}>NEW</span>}
           </span>
         </div>
@@ -101,6 +111,7 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
         <div style={{ position: 'absolute', inset: 0, clipPath: CARD_CLIP, background: T.f }} />
         <div style={{ position: 'absolute', inset: 3, clipPath: CARD_CLIP_IN, background: panel, overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0 1px,transparent 1px 9px)' }} />
+          {p.logo && <SchoolLogo src={p.logo} size={118} style={{ position: 'absolute', top: 14, left: 16, opacity: 0.11, filter: 'grayscale(.2)' }} />}
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(115deg,transparent 36%,rgba(255,255,255,.09) 47%,transparent 58%)' }} />
           <div style={{ position: 'absolute', top: 9, left: 11, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             <span style={{ font: `italic 800 34px/0.9 ${DISPLAY}`, color: T.ink, letterSpacing: '-.01em' }}>{p.ovr}</span>
@@ -115,7 +126,9 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
           <div style={{ position: 'absolute', top: 106, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
             <span style={{ fontSize: 9.5, fontWeight: 700, color: '#C3CBDA' }}>{p.first}</span>
             <span style={{ font: `700 19px/1 ${DISPLAY}`, letterSpacing: '.03em' }}>{p.last.toUpperCase()}</span>
-            <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', color: '#C3CBDA', marginTop: 2 }}>{p.school} · #{p.num}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', color: '#C3CBDA', marginTop: 2 }}>
+              <SchoolLogo src={p.logo} size={16} />{p.school} · #{p.num}
+            </span>
           </div>
           <div style={{ position: 'absolute', top: 152, left: 10, right: 10, height: 1, background: 'rgba(255,255,255,.14)' }} />
           <div style={{ position: 'absolute', top: 157, left: 8, right: 8, display: 'grid', gridTemplateColumns: 'repeat(5,1fr)' }}>
@@ -229,33 +242,34 @@ export function BellButton({ count, onClick }: { count: number; onClick: () => v
   );
 }
 
-/** Rank / Elo / level / streak strip. */
-export function HudBar() {
+/** Rank / record / streak strip. Everything here is your own: unranked until ranked play exists. */
+export function HudBar({ played, wins, losses, streak }: { played: number; wins: number; losses: number; streak: number }) {
+  const pct = played ? Math.round((wins / played) * 100) : 0;
   return (
     <div style={{ flex: 'none', margin: '0 10px', height: 54, position: 'relative' }}>
       <div style={{ position: 'absolute', inset: 0, clipPath: 'polygon(16px 0,100% 0,calc(100% - 16px) 100%,0 100%)', background: 'linear-gradient(90deg,rgba(27,49,87,.96),rgba(17,26,42,.94) 58%,rgba(70,24,32,.92))' }} />
       <div style={{ position: 'absolute', left: 16, right: 0, top: 0, height: 1, background: 'linear-gradient(90deg,rgba(142,177,245,.6),rgba(229,72,77,.6))' }} />
       <div style={{ position: 'absolute', left: 0, right: 16, bottom: 0, height: 1, background: 'linear-gradient(90deg,rgba(142,177,245,.25),rgba(229,72,77,.35))' }} />
       <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '0 24px 0 16px' }}>
-        <DivisionBadge tier="Varsity" size={34} />
+        <DivisionBadge tier="Walk-On" size={34} locked />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: '#93A0B8' }}>VARSITY II</span>
-          <span className="vb-num" style={{ fontSize: 20, lineHeight: 1.05 }}>1,482 <span style={{ fontSize: 11, color: '#93A0B8' }}>ELO</span></span>
+          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: '#93A0B8' }}>UNRANKED</span>
+          <span className="vb-num" style={{ fontSize: 20, lineHeight: 1.05 }}>{played} <span style={{ fontSize: 11, color: '#93A0B8' }}>{played === 1 ? 'BATTLE' : 'BATTLES'}</span></span>
         </div>
         <div style={{ width: 1, height: 28, background: 'rgba(142,177,245,.3)', transform: 'skewX(-18deg)' }} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ font: `italic 800 16px/1 ${DISPLAY}` }}><span style={{ fontSize: 11, color: '#93A0B8' }}>LVL</span> 12</span>
-            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#93A0B8' }}>620/1000</span>
+            <span style={{ font: `italic 800 16px/1 ${DISPLAY}` }}><span style={{ fontSize: 11, color: '#93A0B8' }}>W–L</span> {wins}–{losses}</span>
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#93A0B8' }}>{played ? `${pct}% wins` : 'No battles yet'}</span>
           </div>
-          <div role="progressbar" aria-label="Level progress" aria-valuenow={62} aria-valuemin={0} aria-valuemax={100} style={{ height: 5, borderRadius: 3, background: 'rgba(142,177,245,.15)', overflow: 'hidden' }}>
-            <div style={{ width: '62%', height: '100%', background: 'linear-gradient(90deg,#8EB1F5,#F2F4F8)', borderRadius: 3 }} />
+          <div role="progressbar" aria-label="Win rate" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} style={{ height: 5, borderRadius: 3, background: 'rgba(142,177,245,.15)', overflow: 'hidden' }}>
+            <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#8EB1F5,#F2F4F8)', borderRadius: 3 }} />
           </div>
         </div>
         <div style={{ width: 1, height: 28, background: 'rgba(142,177,245,.3)', transform: 'skewX(-18deg)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }} aria-label="4 win streak">
-          <Icon name="local_fire_department" size={22} fill color="#FF8A3D" style={{ filter: 'drop-shadow(0 0 6px rgba(255,138,61,.6))' }} />
-          <span style={{ font: `italic 800 22px/1 ${DISPLAY}` }}>4</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 1, opacity: streak ? 1 : 0.45 }} aria-label={`${streak} win streak`}>
+          <Icon name="local_fire_department" size={22} fill color="#FF8A3D" style={{ filter: streak ? 'drop-shadow(0 0 6px rgba(255,138,61,.6))' : 'none' }} />
+          <span style={{ font: `italic 800 22px/1 ${DISPLAY}` }}>{streak}</span>
         </div>
       </div>
     </div>

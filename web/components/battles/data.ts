@@ -1,53 +1,57 @@
-// Draft Battles demo data and match simulation.
-// Every athlete, school and username here is fictional (from the Claude Design handoff).
-// Nothing in this module talks to the API yet: battles have no backend.
+// Draft Battles data and match simulation.
+// The player pool is real U Sports athletes rated by the API (GET /players);
+// app/battles/page.tsx loads it and BattlesApp registers it with setPool().
+// No fictional athletes or schools live here.
 
 export type Pos = 'F' | 'D' | 'G';
 export type Side = 'A' | 'B';
 
 export interface Rating { l: string; v: number }
 export interface Player {
-  id: string; first: string; last: string; school: string; pos: Pos;
-  ovr: number; num: string; isNew: boolean; tint: string; ratings: Rating[];
+  /** logo: /logos/<school slug>.png when that file exists in web/public/logos, else null. */
+  id: string; first: string; last: string; school: string; schoolName: string; logo: string | null; pos: Pos;
+  ovr: number; num: string; isNew: boolean; change: number | null; tint: string; ratings: Rating[];
 }
 
-const SCHOOLS: Record<string, [string, string]> = {
-  HBV: ['Harbourview', '#3A7BD5'], CDF: ['Cedar Falls', '#2E9E6A'], KGM: ['Kingsmere', '#8E3B46'],
-  PAL: ['Port Alder', '#C46A2B'], STB: ['St. Brenna', '#6B4FB8'], WRD: ['Westridge', '#B23A48'],
-  GRB: ['Granite Bay', '#5F7488'], PNC: ['Pinecrest', '#2F8F5B'], NGT: ['Northgate', '#2F5FA8'],
-  AUB: ['Aurora Bay', '#A8862B'],
-};
-
-type Raw = [string, string, string, string, Pos, number, string, number?];
-const RAW: Raw[] = [
-  ['p1', 'Maya', 'Lindqvist', 'HBV', 'F', 88, '19'], ['p2', 'Chloé', 'Barrette', 'KGM', 'F', 86, '7'],
-  ['p3', 'Aisha', 'Rahman', 'CDF', 'F', 84, '22'], ['p4', 'Brooke', 'Tanaka', 'STB', 'F', 82, '11'],
-  ['p5', 'Sofia', 'Marchetti', 'WRD', 'F', 79, '16'], ['p6', 'Hannah', 'Okoro', 'PAL', 'F', 77, '9'],
-  ['p7', 'Léa', 'Fournier', 'NGT', 'F', 74, '27'], ['p8', 'Jess', 'Whitford', 'GRB', 'F', 71, '14'],
-  ['p9', 'Nora', 'Kaplan', 'PNC', 'F', 68, '21', 1], ['p10', 'Ellie', 'Dawson', 'AUB', 'F', 63, '33'],
-  ['p11', 'Kenzie', 'MacLeod', 'HBV', 'D', 85, '4'], ['p12', 'Priya', 'Sandhu', 'NGT', 'D', 81, '2'],
-  ['p13', 'Rachel', 'Gauthier', 'KGM', 'D', 78, '5'], ['p14', 'Tess', 'Holloway', 'CDF', 'D', 73, '8'],
-  ['p15', 'Zoe', 'Fraser', 'STB', 'D', 69, '44', 1], ['p16', 'Amara', 'Diallo', 'PAL', 'D', 62, '3'],
-  ['p17', 'Julia', 'Novak', 'WRD', 'G', 87, '31'], ['p18', 'Camille', 'Roy', 'PNC', 'G', 80, '35'],
-  ['p19', 'Sam', 'Ito', 'AUB', 'G', 72, '30'], ['p20', 'Erin', 'Walsh', 'GRB', 'G', 64, '1'],
-];
-
-const OFFSETS: Record<Pos, [string, number][]> = {
-  F: [['SHT', 4], ['PAS', 1], ['SKT', 2], ['DEF', -12], ['PHY', -5]],
-  D: [['SHT', -8], ['PAS', 1], ['SKT', -1], ['DEF', 5], ['PHY', 3]],
-  G: [['REF', 3], ['POS', 1], ['HND', -2], ['REB', 0], ['PHY', -6]],
-};
+/** A rated athlete as GET /players returns it. */
+export interface ApiPlayer {
+  athlete_id: string; first_name: string; last_name: string; school: string; school_id: string; conference: string | null;
+  jersey_number: string | null; class_year: string | null; position: string; ovr: number; sub_ratings: Record<string, number>;
+  is_new: boolean; games_used: number; ovr_change: number | null;
+}
 
 const hash = (s: string) => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+const TINTS = ['#3A7BD5', '#2E9E6A', '#8E3B46', '#C46A2B', '#6B4FB8', '#B23A48', '#5F7488', '#2F8F5B', '#2F5FA8', '#A8862B'];
 
-export const PLAYERS: Player[] = RAW.map(([id, first, last, school, pos, ovr, num, isNew]) => {
-  const h = hash(id + last);
+/** Short school code for the cards: "UBC" stays, "Laval" → LAV, "Toronto Metropolitan" → TM. */
+export function schoolCode(name: string) {
+  const n = name.replace(/\s*\(.*?\)\s*/g, ' ').replace(/^(Université|University)( de| of)?\s+/i, '').trim();
+  if (/^[A-Z]{2,4}$/.test(n)) return n;
+  const words = n.split(/[\s-]+/).filter(Boolean);
+  if (words.length >= 2 && words.length <= 3 && n.length > 12 && words.every((w) => /^[A-Z]/.test(w))) return words.map((w) => w[0]).join('').toUpperCase();
+  return (words[0] ?? n).replace(/[^\p{L}]/gu, '').slice(0, 3).toUpperCase();
+}
+
+/** `logos` holds the school slugs that have a PNG in web/public/logos (see app/page.tsx). */
+export function fromApi(a: ApiPlayer, logos: ReadonlySet<string> = new Set()): Player | null {
+  if (a.position !== 'F' && a.position !== 'D' && a.position !== 'G') return null;
   return {
-    id, first, last, school, pos, ovr, num, isNew: !!isNew, tint: SCHOOLS[school]![1],
-    ratings: OFFSETS[pos].map(([l, o], i) => ({ l, v: Math.max(40, Math.min(99, ovr + o + ((h >> (i * 4)) % 7) - 3)) })),
+    id: a.athlete_id, first: a.first_name, last: a.last_name, school: schoolCode(a.school), schoolName: a.school,
+    logo: logos.has(a.school_id) ? `/logos/${encodeURIComponent(a.school_id)}.png` : null,
+    pos: a.position, ovr: a.ovr, num: a.jersey_number ?? '', isNew: a.is_new, change: a.ovr_change,
+    tint: TINTS[hash(a.school_id) % TINTS.length]!,
+    ratings: Object.entries(a.sub_ratings).map(([l, v]) => ({ l, v })),
   };
-});
-export const PI: Record<string, Player> = Object.fromEntries(PLAYERS.map((p) => [p.id, p]));
+}
+
+// The pool the draft uses. Every athlete either side might draft is registered so player() can resolve them.
+let POOL: Player[] = [];
+let PI: Record<string, Player> = {};
+export function setPool(list: Player[], all: Player[] = list) {
+  POOL = list;
+  PI = Object.fromEntries(all.map((p) => [p.id, p]));
+}
+export const pool = () => POOL;
 export const player = (id: string) => PI[id]!;
 
 export const NEED: Record<Pos, number> = { F: 3, D: 2, G: 1 };
@@ -61,7 +65,7 @@ export const slotOpen = (picks: string[], pos: Pos) => picks.filter((id) => play
 
 /** Best available player for a side; the opponent sometimes takes the second-best for variety. */
 export function bestPick(picks: string[], taken: string[], opponent: boolean): string | undefined {
-  const c = PLAYERS.filter((p) => !taken.includes(p.id) && slotOpen(picks, p.pos)).sort((a, b) => b.ovr - a.ovr);
+  const c = POOL.filter((p) => !taken.includes(p.id) && slotOpen(picks, p.pos)).sort((a, b) => b.ovr - a.ovr);
   if (opponent && c.length > 2 && Math.random() < 0.35) return c[1]!.id;
   return c[0]?.id;
 }
@@ -71,36 +75,10 @@ export const DIVISIONS = ['Walk-On', 'Bench', 'Starter', 'Varsity', 'All-Star', 
 export type Division = (typeof DIVISIONS)[number];
 
 // ---------- People ----------
-const TINTS = ['#3A7BD5', '#2E9E6A', '#8E3B46', '#C46A2B', '#6B4FB8', '#B23A48', '#5F7488', '#2F8F5B', '#2F5FA8', '#A8862B'];
 export const avatarBg = (tint: string) => `radial-gradient(circle at 35% 30%,${tint},#13203A 75%)`;
-export const avatarAt = (i: number) => avatarBg(TINTS[i % TINTS.length]!);
-export const ME = { user: 'kmac', ini: 'KM', bg: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', div: 'Varsity II', elo: 1482 };
-
 export interface Opponent { user: string; ini: string; bg: string; line: string; ai?: boolean }
-export const JAYBIRD: Opponent = { user: 'jaybird', ini: 'JB', bg: avatarBg('#3A7BD5'), line: 'Varsity I · 1,531' };
+/** The house AI. Ranked and friend opponents come from the API once Battles is wired to it. */
 export const AI_OPP: Opponent = { user: 'VarsityHQ AI', ini: 'AI', bg: avatarBg('#5F7488'), line: 'Unranked', ai: true };
-
-export interface Friend { name: string; ini: string; tint: string; sub: string; online: boolean; busy: boolean }
-export const FRIENDS: Friend[] = [
-  { name: 'jaybird', ini: 'JB', tint: '#3A7BD5', sub: 'Varsity I · 1,531', online: true, busy: false },
-  { name: 'jay_dangles', ini: 'JD', tint: '#2E9E6A', sub: 'Starter III · 1,204', online: true, busy: false },
-  { name: 'jaylynn.k', ini: 'JK', tint: '#6B4FB8', sub: 'All-Star II · 1,702', online: false, busy: true },
-  { name: 'jayden_ice', ini: 'JI', tint: '#C46A2B', sub: 'Bench I · 980', online: false, busy: false },
-];
-
-export interface InboxItem {
-  id: string; title: string; sub: string; chip: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED'; ini: string; tint: number;
-}
-export const INBOX: InboxItem[] = [
-  { id: 'n1', title: '@jaybird challenged you', sub: "Hockey · Women's · Unranked · expires in 1 min", chip: 'PENDING', ini: 'JB', tint: 0 },
-  { id: 'n2', title: '@puckluck accepted', sub: "You won 5–2 · Basketball · Men's", chip: 'ACCEPTED', ini: 'PL', tint: 1 },
-  { id: 'n3', title: '@topshelf_tess declined', sub: "Soccer · Women's", chip: 'DECLINED', ini: 'TT', tint: 4 },
-  { id: 'n4', title: '@five_hole_fi challenged you', sub: "Hockey · Men's · yesterday", chip: 'EXPIRED', ini: 'FF', tint: 2 },
-  { id: 'n5', title: '@dangle_dani accepted', sub: "Lost 2–3 · Volleyball · Women's", chip: 'ACCEPTED', ini: 'DD', tint: 5 },
-  { id: 'n6', title: '@icecold_ava challenged you', sub: 'Football · 2 days ago', chip: 'EXPIRED', ini: 'IA', tint: 3 },
-];
-
-export const LADDER_USERS = ['topshelf_tess', 'puckluck', 'five_hole_fi', 'dangle_dani', 'icecold_ava', 'glovesave', 'kmac', 'snipe_city', 'bardown_bea', 'rinkrat_rae', 'slapshot_sky', 'pk_queen', 'breakaway_b', 'hatty_hannah', 'blueline_bo', 'crossbar_cat', 'wrister_wen', 'top_cheese', 'offside_olive', 'zamboni_zoe', 'penalty_pip', 'dump_n_chase', 'clapper_cleo', 'backcheck_bri', 'sin_bin_sam', 'faceoff_fay', 'cherrypick_cj', 'icing_iris', 'lazy_pass_lu', 'pylon_pat'];
 
 export const SPORTS = [
   { id: 'hockey', name: 'Hockey', icon: 'sports_hockey', formation: '3F · 2D · 1G' },
@@ -149,7 +127,7 @@ const lineup = (ids: string[]) => {
 };
 
 /** Builds the full event stream for a drafted matchup. Deterministic for a given seed. */
-export function simulate(teamA: string[], teamB: string[], seed: number, userA = '@kmac', userB = '@jaybird'): Match {
+export function simulate(teamA: string[], teamB: string[], seed: number, userA: string, userB: string): Match {
   const rnd = rng(seed);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!;
   const A = lineup(teamA), B = lineup(teamB);

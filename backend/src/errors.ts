@@ -19,8 +19,6 @@ export const notFound = (what: string) => new HttpError(404, 'NOT_FOUND', `${wha
  * those map straight to API error codes.
  */
 const HINT_STATUS: Record<string, number> = {
-  TERMS_NOT_ACCEPTED: 403,
-  ATHLETE_OWN_SPORT: 403,
   LEAGUE_FULL: 409,
   INVALID_SLOT: 422,
   INELIGIBLE_POSITION: 422,

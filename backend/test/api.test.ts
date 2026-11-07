@@ -33,11 +33,9 @@ async function athleteId(lastName: string): Promise<string> {
   return `usports_ath_${rows[0]!.id}`;
 }
 
-async function acceptTerms(subject: string, athleteSports: string[] = []) {
-  const me = await request(app).get('/api/v1/me').set(as(subject)).expect(200);
-  await request(app).put('/api/v1/me/terms').set(as(subject))
-    .send({ terms_version: me.body.terms.current_version, is_usports_athlete: athleteSports.length > 0, athlete_sports: athleteSports })
-    .expect(200);
+/** Signs the user in once, which creates their account. Nothing else is needed to play. */
+async function ensureUser(subject: string) {
+  await request(app).get('/api/v1/me').set(as(subject)).expect(200);
 }
 
 describe('GET /api/v1/sports', () => {
@@ -157,7 +155,7 @@ describe('reference endpoints', () => {
   });
 });
 
-describe('auth and terms', () => {
+describe('auth', () => {
   it('requires authentication for user endpoints', async () => {
     await request(app).get('/api/v1/me').expect(401);
   });
@@ -166,31 +164,17 @@ describe('auth and terms', () => {
     const token = await new SignJWT({ name: 'Token User' }).setProtectedHeader({ alg: 'HS256' })
       .setSubject('jwt-user').setExpirationTime('5m').sign(new TextEncoder().encode(JWT_SECRET));
     const res = await request(app).get('/api/v1/me').set('Authorization', `Bearer ${token}`).expect(200);
-    expect(res.body).toMatchObject({ display_name: 'Token User', terms: { needs_acceptance: true } });
+    expect(res.body).toMatchObject({ display_name: 'Token User' });
+    expect(res.body).not.toHaveProperty('terms');
+    expect(res.body).not.toHaveProperty('athlete_sports');
     const bad = await request(app).get('/api/v1/me').set('Authorization', 'Bearer nope').expect(401);
     expect(bad.body.error.code).toBe('INVALID_TOKEN');
   });
 
-  it('blocks league creation until terms are accepted', async () => {
-    const res = await request(app).post('/api/v1/leagues').set(as('no-terms'))
-      .send({ league_name: 'Nope', sport: 'usports_mbk' }).expect(403);
-    expect(res.body.error.code).toBe('TERMS_NOT_ACCEPTED');
-  });
-
-  it('rejects a stale terms version and an athlete without sports', async () => {
-    const stale = await request(app).put('/api/v1/me/terms').set(as('stale'))
-      .send({ terms_version: '1999-01-01', is_usports_athlete: false }).expect(409);
-    expect(stale.body.error.code).toBe('TERMS_VERSION_MISMATCH');
-    const noSports = await request(app).put('/api/v1/me/terms').set(as('stale'))
-      .send({ terms_version: '2026-11-01', is_usports_athlete: true }).expect(422);
-    expect(noSports.body.error.code).toBe('ATHLETE_SPORTS_REQUIRED');
-  });
-
-  it('does not let a declared athlete un-declare', async () => {
-    await acceptTerms('undeclare', ['usports_wbk']);
-    const res = await request(app).put('/api/v1/me/terms').set(as('undeclare'))
-      .send({ terms_version: '2026-11-01', is_usports_athlete: false }).expect(409);
-    expect(res.body.error.code).toBe('ATHLETE_DECLARATION_LOCKED');
+  it('lets a brand-new user create a league straight away (no terms step)', async () => {
+    await request(app).post('/api/v1/leagues').set(as('no-terms'))
+      .send({ league_name: 'Day One', sport: 'usports_mbk' }).expect(201);
+    await request(app).put('/api/v1/me/terms').set(as('no-terms')).send({}).expect(404);
   });
 });
 
@@ -199,10 +183,10 @@ describe('leagues', () => {
   let inviteCode: string;
 
   beforeAll(async () => {
-    await acceptTerms('commish');
-    await acceptTerms('rival');
-    await acceptTerms('third');
-    await acceptTerms('hooper', ['usports_mbk']);
+    await ensureUser('commish');
+    await ensureUser('rival');
+    await ensureUser('third');
+    await ensureUser('hooper');
   });
 
   it('creates a league with the default ruleset and the commissioner\'s team', async () => {
@@ -252,15 +236,9 @@ describe('leagues', () => {
     expect(inactive.body.error.code).toBe('SPORT_INACTIVE');
   });
 
-  it('enforces T&C athlete eligibility: no leagues in their own sport, any other sport is fine', async () => {
-    const own = await request(app).post('/api/v1/leagues').set(as('hooper'))
-      .send({ league_name: 'My Sport', sport: 'usports_mbk' }).expect(403);
-    expect(own.body.error.code).toBe('ATHLETE_OWN_SPORT');
-
-    const join = await request(app).post(`/api/v1/leagues/${hoops}/teams`).set(as('hooper'))
-      .send({ team_name: 'Hooper', invite_code: inviteCode }).expect(403);
-    expect(join.body.error.code).toBe('ATHLETE_OWN_SPORT');
-
+  it('has no athlete-eligibility rule: anyone can create or join a league in any sport', async () => {
+    await request(app).post('/api/v1/leagues').set(as('hooper'))
+      .send({ league_name: 'Hooper Hoops', sport: 'usports_mbk' }).expect(201);
     await request(app).post('/api/v1/leagues').set(as('hooper'))
       .send({ league_name: 'Hooper Plays Football', sport: 'usports_fb' }).expect(201);
   });

@@ -54,9 +54,6 @@ describe('sport_id across endpoints', () => {
   });
 
   it('a volleyball league lets position-less athletes start (wildcard slot)', async () => {
-    const me = await request(app).get('/api/v1/me').set(as('vb-commish')).expect(200);
-    await request(app).put('/api/v1/me/terms').set(as('vb-commish'))
-      .send({ terms_version: me.body.terms.current_version, is_usports_athlete: false }).expect(200);
     const league = await request(app).post('/api/v1/leagues').set(as('vb-commish'))
       .send({ league_name: 'Spike League', sport: 'usports_mvb', team_name: 'Diggers' }).expect(201);
     expect(league.body.position_eligibility).toEqual({ PLAYER: ['*'] });

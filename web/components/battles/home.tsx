@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
 
-import { PI } from './data';
-import { BellButton, DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip } from './ui';
+import type { Player } from './data';
+import type { MyLeague } from './leagues';
+import { useMe, useRecord } from './me';
+import { BellButton, DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip, SchoolLogo } from './ui';
 
 const PAGES = ['Play', 'Discover', 'Profile'] as const;
 
@@ -47,9 +49,25 @@ function Hero({ tone, chip, title, sub, onClick, href }: {
     : <button type="button" onClick={onClick} className={cls} style={style}>{body}</button>;
 }
 
-export function HomeScreen({ go, inboxCount }: {
-  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'ai') => void; inboxCount: number;
+export function HomeScreen({ go, pool, leagues }: {
+  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'leagues' | 'ai') => void; pool: Player[]; leagues: MyLeague[];
 }) {
+  const me = useMe();
+  const rec = useRecord();
+  const recent = rec.results.slice(-4);
+  // Discover tiles, all from the real rated pool.
+  const top = pool.slice().sort((a, b) => b.ovr - a.ovr).slice(0, 2);
+  const risers = pool.filter((p) => (p.change ?? 0) > 0).sort((a, b) => b.change! - a.change!).slice(0, 3);
+  const bySchool = new Map<string, { name: string; tint: string; logo: string | null; ovrs: number[] }>();
+  for (const p of pool) {
+    const s = bySchool.get(p.schoolName) ?? { name: p.schoolName, tint: p.tint, logo: p.logo, ovrs: [] };
+    s.ovrs.push(p.ovr); bySchool.set(p.schoolName, s);
+  }
+  // Average of each school's best six (a full lineup), so deep rosters don't win on count alone.
+  const schools = [...bySchool.values()].filter((s) => s.ovrs.length >= 3)
+    .map((s) => { const best = s.ovrs.sort((a, b) => b - a).slice(0, 6); return { ...s, avg: best.reduce((t, v) => t + v, 0) / best.length }; })
+    .sort((a, b) => b.avg - a.avg).slice(0, 3);
+  const none = <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>No ratings yet</span>;
   const [page, setPage] = useState(0);
   const pager = useRef<HTMLDivElement>(null);
   const scrollTo = (k: number) => {
@@ -62,13 +80,10 @@ export function HomeScreen({ go, inboxCount }: {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 6px 18px', flex: 'none' }}>
         <Logo height={40} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <span style={{ height: 36, padding: '0 12px', borderRadius: 18, background: 'rgba(233,185,73,.14)', border: '1px solid rgba(233,185,73,.4)', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#E9B949' }}>
-            <Icon name="military_tech" size={18} fill />2 rewards
-          </span>
-          <BellButton count={inboxCount} onClick={() => go('inbox')} />
+          <BellButton count={0} onClick={() => go('inbox')} />
         </div>
       </div>
-      <HudBar />
+      <HudBar played={rec.played} wins={rec.wins} losses={rec.losses} streak={rec.streak} />
 
       <div ref={pager} className="no-scrollbar" aria-label="Home pages"
         onScroll={(e) => { const el = e.currentTarget; const p = Math.round(el.scrollLeft / el.clientWidth); if (p !== page) setPage(p); }}
@@ -77,12 +92,12 @@ export function HomeScreen({ go, inboxCount }: {
         {/* PAGE 1 · PLAY */}
         <section aria-label="Play" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
           <Hero tone="primary" onClick={() => go('lobby')} title={['Draft', 'Battle']} sub="6 picks · live sim · ~3 min"
-            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(255,138,61,.18)', color: '#FF8A3D', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#FF8A3D', animation: 'vpulse 1.4s infinite' }} />RANKED · 1V1</span>} />
+            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(255,138,61,.18)', color: '#FF8A3D', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#FF8A3D', animation: 'vpulse 1.4s infinite' }} />1V1 · VS AI</span>} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(132px,1fr)', gap: 12, flex: 1, paddingBottom: 6 }}>
             <Tile onClick={() => go('ladder')} label="Ranked Ladder">
-              <DivisionBadge tier="Varsity" size={54} />
+              <DivisionBadge tier="Walk-On" size={54} locked />
               <TileTitle>Ranked Ladder</TileTitle>
-              <TileSub color="#3DD68C">#7 · 2 from promo</TileSub>
+              <TileSub>Unranked · coming soon</TileSub>
             </Tile>
             <Tile onClick={() => go('ai')} label="Quick Play versus AI">
               <Icon name="smart_toy" size={44} fill color="#8EB1F5" />
@@ -90,56 +105,58 @@ export function HomeScreen({ go, inboxCount }: {
               <TileSub>vs AI · Unranked</TileSub>
             </Tile>
             <Tile>
-              <div style={{ display: 'flex', gap: 5 }}><ResultPip r="W" /><ResultPip r="W" /><ResultPip r="L" /><ResultPip r="W" /></div>
+              {recent.length
+                ? <div style={{ display: 'flex', gap: 5 }}>{recent.map((r, i) => <ResultPip key={i} r={r} />)}</div>
+                : <Icon name="history" size={40} color="#8EB1F5" />}
               <TileTitle>Recent Battles</TileTitle>
-              <TileSub>Last · W 4–3 OT</TileSub>
+              <TileSub>{rec.played ? `${rec.wins}–${rec.losses} vs AI` : 'No battles yet'}</TileSub>
             </Tile>
             <Tile onClick={() => go('friends')} label="Friends">
-              <div style={{ display: 'flex' }}>
-                {[['JB', '#3A7BD5'], ['PL', '#2E9E6A'], ['TS', '#6B4FB8']].map(([ini, c], i) => (
-                  <span key={ini} style={{ width: 32, height: 32, borderRadius: 16, marginLeft: i ? -9 : 0, background: `radial-gradient(circle at 35% 30%,${c},#13203A 75%)`, border: '2px solid #111A2A', font: `italic 900 13px ${DISPLAY}`, display: 'grid', placeItems: 'center' }}>{ini}</span>
-                ))}
-                <span style={{ width: 32, height: 32, borderRadius: 16, marginLeft: -9, background: '#18233A', border: '2px solid #111A2A', fontSize: 11, fontWeight: 800, color: '#C3CBDA', display: 'grid', placeItems: 'center' }}>+15</span>
-              </div>
+              <Icon name="group_add" size={42} fill color="#8EB1F5" />
               <TileTitle>Friends</TileTitle>
-              <TileSub color="#3DD68C"><span style={{ width: 6, height: 6, borderRadius: 3, background: '#3DD68C' }} />2 online</TileSub>
+              <TileSub>Coming soon</TileSub>
             </Tile>
           </div>
         </section>
 
         {/* PAGE 2 · DISCOVER */}
         <section aria-label="Discover" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
-          <Hero tone="blue" href="/" title={['My', 'Leagues']} sub="#2 OUA Diehards · Create or join"
-            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>SEASON-LONG · 3 LEAGUES</span>} />
+          <Hero tone="blue" onClick={() => go('leagues')} title={['My', 'Leagues']}
+            sub={leagues.length ? `${leagues.length === 1 ? '1 league' : `${leagues.length} leagues`} · ${leagues[0]!.name}${leagues[0]!.rank ? ` #${leagues[0]!.rank}` : ''}` : 'Season-long fantasy leagues'}
+            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>SEASON-LONG</span>} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(132px,1fr)', gap: 12, flex: 1, paddingBottom: 6 }}>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
-              {[['Kaplan', 6], ['Fournier', 4], ['Okoro', 3]].map(([n, d]) => (
-                <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700 }}><span>{n}</span><span style={{ color: '#3DD68C' }}>▲ {d}</span></div>
-              ))}
-              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Risers This Week</span>
+              {risers.length ? risers.map((p) => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.last}</span><span style={{ color: '#3DD68C' }}>▲ {p.change}</span>
+                </div>
+              )) : <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>{pool.length ? 'No rating changes yet' : 'No ratings yet'}</span>}
+              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Risers</span>
             </Tile>
             <Tile tone="tile-gold">
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <div style={{ transform: 'rotate(-8deg)', marginRight: -14, opacity: 0.9 }}><PlayerCard p={PI.p17!} size="xs" /></div>
-                <div style={{ position: 'relative', zIndex: 1 }}><PlayerCard p={PI.p1!} size="xs" /></div>
-              </div>
+              {top.length === 2 ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <div style={{ transform: 'rotate(-8deg)', marginRight: -14, opacity: 0.9 }}><PlayerCard p={top[1]!} size="xs" /></div>
+                  <div style={{ position: 'relative', zIndex: 1 }}><PlayerCard p={top[0]!} size="xs" /></div>
+                </div>
+              ) : <Icon name="star" size={44} fill color="#E9B949" />}
               <TileTitle>Top Rated</TileTitle>
-              <TileSub color="#E9B949">Week 45 · 85+ elite</TileSub>
+              <TileSub color="#E9B949">{pool.length ? `${pool.length} rated athletes` : 'No ratings yet'}</TileSub>
             </Tile>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
-              {([['1', 'Harbourview', '#3A7BD5'], ['2', 'Kingsmere', '#8E3B46'], ['3', 'St. Brenna', '#6B4FB8']] as const).map(([r, n, c]) => (
-                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700 }}>
-                  <span style={{ font: `700 14px ${DISPLAY}`, color: r === '1' ? '#E9B949' : '#C3CBDA', width: 10 }}>{r}</span>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
-                  <span style={{ flex: 1 }}>{n}</span>
+              {schools.length ? schools.map((sc, i) => (
+                <div key={sc.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ font: `700 14px ${DISPLAY}`, color: i === 0 ? '#E9B949' : '#C3CBDA', width: 10 }}>{i + 1}</span>
+                  {sc.logo ? <SchoolLogo src={sc.logo} size={16} /> : <span style={{ width: 8, height: 8, borderRadius: 2, background: sc.tint, flex: 'none' }} />}
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name}</span>
                 </div>
-              ))}
-              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Campus Wars</span>
+              )) : none}
+              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Top Schools</span>
             </Tile>
             <Tile tone="tile-gold">
               <Icon name="military_tech" size={52} fill color="#E9B949" style={{ filter: 'drop-shadow(0 0 12px rgba(233,185,73,.45))' }} />
               <TileTitle>Rewards</TileTitle>
-              <TileSub color="#E9B949">2 ready to claim</TileSub>
+              <TileSub color="#E9B949">Coming soon</TileSub>
             </Tile>
           </div>
         </section>
@@ -148,40 +165,37 @@ export function HomeScreen({ go, inboxCount }: {
         <section aria-label="Profile" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
           <div className="vb-tile-primary" style={{ height: 150, flex: 'none', display: 'flex', alignItems: 'center', gap: 16, padding: '0 18px' }}>
             <div style={{ width: 84, height: 84, borderRadius: '50%', padding: 3, background: 'linear-gradient(160deg,#E5484D,#8EB1F5)', flex: 'none' }}>
-              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', display: 'grid', placeItems: 'center', font: `italic 900 32px ${DISPLAY}` }}>KM</div>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', display: 'grid', placeItems: 'center', font: `italic 900 32px ${DISPLAY}` }}>{me.ini}</div>
             </div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-              <span className="vb-display" style={{ fontSize: 32, lineHeight: 1 }}>@kmac</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#C3CBDA' }}>Varsity II · Elo 1,482</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8' }}>41–23 · best streak 7</span>
+              <span className="vb-display" style={{ fontSize: 32, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.handle}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#C3CBDA' }}>Unranked</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8' }}>{rec.played ? `${rec.wins}–${rec.losses} · best streak ${rec.best}` : 'No battles yet'}</span>
             </div>
-            <DivisionBadge tier="Varsity" size={52} />
+            <DivisionBadge tier="Walk-On" size={52} locked />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(120px,1fr)', gap: 12, flex: 1 }}>
             <Tile>
-              <span className="vb-display" style={{ fontSize: 46, lineHeight: 0.9 }}>64</span>
+              <span className="vb-display" style={{ fontSize: 46, lineHeight: 0.9 }}>{rec.played}</span>
               <TileTitle>My Battles</TileTitle>
-              <TileSub>12 this week</TileSub>
+              <TileSub>vs AI · this device</TileSub>
             </Tile>
             <Tile>
-              <svg width="132" height="44" viewBox="0 0 132 44" aria-label="Elo trend, up 118 over 30 days" role="img">
-                <polyline points="0,36 14,32 26,34 40,26 54,28 66,20 80,22 94,14 108,16 120,8 132,6" fill="none" stroke="#8EB1F5" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-                <circle cx="128" cy="7" r="3.5" fill="#F2F4F8" />
-              </svg>
+              <span className="vb-display" style={{ fontSize: 46, lineHeight: 0.9, color: '#8EB1F5' }}>{rec.played ? `${Math.round((rec.wins / rec.played) * 100)}%` : '—'}</span>
               <TileTitle>My Stats</TileTitle>
-              <TileSub>41–23 · Elo +118 / 30d</TileSub>
+              <TileSub>{rec.played ? `Win rate · ${rec.wins}–${rec.losses}` : 'Win rate'}</TileSub>
             </Tile>
             <Tile>
               <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-                <DivisionBadge tier="Starter" size={30} /><DivisionBadge tier="Varsity" size={40} /><DivisionBadge tier="All-Star" size={30} locked />
+                <DivisionBadge tier="Starter" size={30} locked /><DivisionBadge tier="Varsity" size={40} locked /><DivisionBadge tier="All-Star" size={30} locked />
               </div>
               <TileTitle>Badges</TileTitle>
-              <TileSub>9 of 24</TileSub>
+              <TileSub>Coming soon</TileSub>
             </Tile>
             <Tile onClick={() => go('friends')} label="Friends">
               <Icon name="group" size={40} fill color="#8EB1F5" />
               <TileTitle>Friends</TileTitle>
-              <TileSub>18 · 2 online</TileSub>
+              <TileSub>Coming soon</TileSub>
             </Tile>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, flex: 'none', paddingBottom: 6 }}>
