@@ -8,7 +8,7 @@ U Sports fantasy league app built on real data from current Canadian university 
 | `db/`       | PostgreSQL schema, migrations, seeds, smoke test             | ✅ Phase 1 |
 | `pipeline/` | Python 3.11+ ingestion (`usportspy` + usports.ca → Postgres) | ✅ Phase 2 (basketball, football) |
 | `backend/`  | Node.js / Express 5 / TypeScript REST API (`/api/v1`), incl. **Draft Battles** (1v1 draft + simulated matches, realtime) | ✅ Phase 3 |
-| `web/`      | VarsityHQ web app: Next.js 16 / Tailwind 4 (`web/README.md`)  | ✅ |
+| `web/`      | VarsityHQ web app: Draft Battles is the whole site; Next.js 16 / Tailwind 4 (`web/README.md`)  | ✅ |
 | `docs/`     | Product rules, e.g. [athlete eligibility T&C](docs/terms/athlete-eligibility.md) | |
 
 ## Local setup

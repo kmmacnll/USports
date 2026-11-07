@@ -19,8 +19,8 @@ const LINKABLE = ['home', 'lobby', 'friends', 'inbox', 'ladder'] as const;
  * invites and the ladder need real opponents from the API, so those screens
  * say "coming soon" instead of showing made-up users.
  */
-export function BattlesApp({ displayName, leagueCount, pools }: {
-  displayName: string | null; leagueCount: number; pools: { W: Player[]; M: Player[] };
+export function BattlesApp({ displayName, pools }: {
+  displayName: string | null; pools: { W: Player[]; M: Player[] };
 }) {
   const me = useMemo(() => battleUser(displayName), [displayName]);
   const [screen, setScreen] = useState<Screen>('home');
@@ -55,7 +55,7 @@ export function BattlesApp({ displayName, leagueCount, pools }: {
   const playAI = () => { setMatch(null); nav(poolSize >= 12 ? 'vs' : 'lobby'); };
   const sportName = SPORTS.find((s) => s.id === sport)!.name;
   const genderName = gender === 'W' ? "Women's" : "Men's";
-  const home = <HomeScreen leagueCount={leagueCount} pool={pools.W.length ? pools.W : pools.M} go={(to) => (to === 'ai' ? playAI() : nav(to))} />;
+  const home = <HomeScreen pool={pools.W.length ? pools.W : pools.M} go={(to) => (to === 'ai' ? playAI() : nav(to))} />;
 
   let body: React.ReactNode;
   switch (screen) {

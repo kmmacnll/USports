@@ -48,13 +48,12 @@ function Hero({ tone, chip, title, sub, onClick, href }: {
     : <button type="button" onClick={onClick} className={cls} style={style}>{body}</button>;
 }
 
-export function HomeScreen({ go, leagueCount, pool }: {
-  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'ai') => void; leagueCount: number; pool: Player[];
+export function HomeScreen({ go, pool }: {
+  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'ai') => void; pool: Player[];
 }) {
   const me = useMe();
   const rec = useRecord();
   const recent = rec.results.slice(-4);
-  const leagues = leagueCount === 1 ? '1 league' : `${leagueCount} leagues`;
   // Discover tiles, all from the real rated pool.
   const top = pool.slice().sort((a, b) => b.ovr - a.ovr).slice(0, 2);
   const risers = pool.filter((p) => (p.change ?? 0) > 0).sort((a, b) => b.change! - a.change!).slice(0, 3);
@@ -121,8 +120,9 @@ export function HomeScreen({ go, leagueCount, pool }: {
 
         {/* PAGE 2 · DISCOVER */}
         <section aria-label="Discover" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
-          <Hero tone="blue" href="/" title={['My', 'Leagues']} sub={leagueCount ? `${leagues} · Create or join` : 'Create or join a league'}
-            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>SEASON-LONG{leagueCount ? ` · ${leagues.toUpperCase()}` : ''}</span>} />
+          <Hero tone="blue" onClick={() => go('lobby')} title={['Real', 'Players']}
+            sub={pool.length ? `${pool.length} rated U Sports athletes · Draft them now` : 'Ratings for real U Sports athletes are on the way'}
+            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>U SPORTS · RATED</span>} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(132px,1fr)', gap: 12, flex: 1, paddingBottom: 6 }}>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
               {risers.length ? risers.map((p) => (
