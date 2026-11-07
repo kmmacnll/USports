@@ -53,7 +53,7 @@ export async function setup() {
   execFileSync(migrate, ['up'], { env: env2, stdio: 'pipe' });
   execFileSync(migrate, ['seed'], { env: env2, stdio: 'pipe' });
   const { createPool } = await import('../src/db.js');
-  const { seedFakeData } = await import('../src/battles/dev/seed.js');
+  const { seedFakeData } = await import('./fake-seed.js');
   const { recomputeRatings } = await import('../src/battles/ratings/job.js');
   const pool = createPool(battles.toString(), 2);
   await seedFakeData(pool, { teams: 10, seed: 4242 });

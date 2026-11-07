@@ -82,7 +82,7 @@ function CreateLeagueForm({ sports, defaultSport, blocked }: { sports: Sport[]; 
       <input type="hidden" name="max_teams" value={teams} />
       <div>
         <label className="label" htmlFor="league_name">League name</label>
-        <input id="league_name" name="league_name" required maxLength={80} className="input" placeholder="e.g. Residence Rivals" />
+        <input id="league_name" name="league_name" required maxLength={80} className="input" />
       </div>
       <div role="radiogroup" aria-labelledby="sport-label">
         <span id="sport-label" className="label">Sport</span>
@@ -111,7 +111,7 @@ function CreateLeagueForm({ sports, defaultSport, blocked }: { sports: Sport[]; 
       </div>
       <div>
         <label className="label" htmlFor="team_name">Your team name</label>
-        <input id="team_name" name="team_name" required maxLength={60} className="input" placeholder="Commish FC" />
+        <input id="team_name" name="team_name" required maxLength={60} className="input" />
       </div>
       {state && !state.ok && <ErrorNote message={state.error.message} />}
       <button className="btn-primary h-[52px] w-full text-[15px]" disabled={pending || !sport}><Plus className="size-5" /> {pending ? 'Creating…' : 'Create league'}</button>
@@ -126,11 +126,11 @@ function JoinLeagueForm() {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label" htmlFor="league_id">League ID</label>
-          <input id="league_id" name="league_id" required className="input" placeholder="lg_12" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          <input id="league_id" name="league_id" required className="input" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
         </div>
         <div>
           <label className="label" htmlFor="invite_code">Invite code</label>
-          <input id="invite_code" name="invite_code" className="input font-mono" placeholder="3f9a1c2e" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          <input id="invite_code" name="invite_code" className="input font-mono" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
         </div>
       </div>
       <p className="-mt-2 text-xs text-ink-4">Your commissioner can copy both from the league page.</p>

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { avgOvr, bestPick, DRAFT_PICKS, PICK_SECONDS, player, PLAYERS, slotOpen, type Opponent, type Pos, type Side } from './data';
+import { avgOvr, bestPick, DRAFT_PICKS, PICK_SECONDS, player, pool as getPool, slotOpen, type Opponent, type Pos, type Side } from './data';
+import { useMe } from './me';
 import { DISPLAY, EMPTY_SLOT_CLIP, PlayerCard } from './ui';
 
 type Filter = 'All' | Pos;
@@ -78,11 +79,12 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
     return () => clearTimeout(t);
   }, [turn, done]);
 
-  const pool = PLAYERS.filter((p) => !taken.includes(p.id) && (filt === 'All' || p.pos === filt)).sort((a, b) => b.ovr - a.ovr);
+  const pool = getPool().filter((p) => !taken.includes(p.id) && (filt === 'All' || p.pos === filt)).sort((a, b) => b.ovr - a.ovr);
   const aA = avgOvr(dA), aB = avgOvr(dB);
   const ringColor = myTurn ? (clock <= 5 ? '#FF8A3D' : '#E5484D') : '#8EB1F5';
   const ringOffset = done ? 0 : myTurn ? 113.1 * (1 - clock / PICK_SECONDS) : 0;
   const oppName = opp.ai ? opp.user : `@${opp.user}`;
+  const me = useMe();
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -139,8 +141,8 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
         <Slots picks={dA} side="A" />
       </div>
       <div style={{ flex: 'none', padding: '6px 14px 14px', display: 'flex', alignItems: 'center', gap: 10, height: 52 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 15, background: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', border: '1.5px solid #E5484D', display: 'grid', placeItems: 'center', font: `italic 900 12px ${DISPLAY}` }}>KM</span>
-        <span style={{ fontSize: 13.5, fontWeight: 800, flex: 1 }}>@kmac · You</span>
+        <span style={{ width: 30, height: 30, borderRadius: 15, background: me.bg, border: '1.5px solid #E5484D', display: 'grid', placeItems: 'center', font: `italic 900 12px ${DISPLAY}` }}>{me.ini}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 800, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.signedIn ? `${me.handle} · You` : 'You'}</span>
         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: '#93A0B8' }}>AVG OVR</span>
         <span className="vb-num" style={{ fontSize: 22, color: '#F2666B' }}>{aA ?? '—'}</span>
       </div>

@@ -229,33 +229,34 @@ export function BellButton({ count, onClick }: { count: number; onClick: () => v
   );
 }
 
-/** Rank / Elo / level / streak strip. */
-export function HudBar() {
+/** Rank / record / streak strip. Everything here is your own: unranked until ranked play exists. */
+export function HudBar({ played, wins, losses, streak }: { played: number; wins: number; losses: number; streak: number }) {
+  const pct = played ? Math.round((wins / played) * 100) : 0;
   return (
     <div style={{ flex: 'none', margin: '0 10px', height: 54, position: 'relative' }}>
       <div style={{ position: 'absolute', inset: 0, clipPath: 'polygon(16px 0,100% 0,calc(100% - 16px) 100%,0 100%)', background: 'linear-gradient(90deg,rgba(27,49,87,.96),rgba(17,26,42,.94) 58%,rgba(70,24,32,.92))' }} />
       <div style={{ position: 'absolute', left: 16, right: 0, top: 0, height: 1, background: 'linear-gradient(90deg,rgba(142,177,245,.6),rgba(229,72,77,.6))' }} />
       <div style={{ position: 'absolute', left: 0, right: 16, bottom: 0, height: 1, background: 'linear-gradient(90deg,rgba(142,177,245,.25),rgba(229,72,77,.35))' }} />
       <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '0 24px 0 16px' }}>
-        <DivisionBadge tier="Varsity" size={34} />
+        <DivisionBadge tier="Walk-On" size={34} locked />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: '#93A0B8' }}>VARSITY II</span>
-          <span className="vb-num" style={{ fontSize: 20, lineHeight: 1.05 }}>1,482 <span style={{ fontSize: 11, color: '#93A0B8' }}>ELO</span></span>
+          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: '#93A0B8' }}>UNRANKED</span>
+          <span className="vb-num" style={{ fontSize: 20, lineHeight: 1.05 }}>{played} <span style={{ fontSize: 11, color: '#93A0B8' }}>{played === 1 ? 'BATTLE' : 'BATTLES'}</span></span>
         </div>
         <div style={{ width: 1, height: 28, background: 'rgba(142,177,245,.3)', transform: 'skewX(-18deg)' }} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ font: `italic 800 16px/1 ${DISPLAY}` }}><span style={{ fontSize: 11, color: '#93A0B8' }}>LVL</span> 12</span>
-            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#93A0B8' }}>620/1000</span>
+            <span style={{ font: `italic 800 16px/1 ${DISPLAY}` }}><span style={{ fontSize: 11, color: '#93A0B8' }}>W–L</span> {wins}–{losses}</span>
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#93A0B8' }}>{played ? `${pct}% wins` : 'No battles yet'}</span>
           </div>
-          <div role="progressbar" aria-label="Level progress" aria-valuenow={62} aria-valuemin={0} aria-valuemax={100} style={{ height: 5, borderRadius: 3, background: 'rgba(142,177,245,.15)', overflow: 'hidden' }}>
-            <div style={{ width: '62%', height: '100%', background: 'linear-gradient(90deg,#8EB1F5,#F2F4F8)', borderRadius: 3 }} />
+          <div role="progressbar" aria-label="Win rate" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} style={{ height: 5, borderRadius: 3, background: 'rgba(142,177,245,.15)', overflow: 'hidden' }}>
+            <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#8EB1F5,#F2F4F8)', borderRadius: 3 }} />
           </div>
         </div>
         <div style={{ width: 1, height: 28, background: 'rgba(142,177,245,.3)', transform: 'skewX(-18deg)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }} aria-label="4 win streak">
-          <Icon name="local_fire_department" size={22} fill color="#FF8A3D" style={{ filter: 'drop-shadow(0 0 6px rgba(255,138,61,.6))' }} />
-          <span style={{ font: `italic 800 22px/1 ${DISPLAY}` }}>4</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 1, opacity: streak ? 1 : 0.45 }} aria-label={`${streak} win streak`}>
+          <Icon name="local_fire_department" size={22} fill color="#FF8A3D" style={{ filter: streak ? 'drop-shadow(0 0 6px rgba(255,138,61,.6))' : 'none' }} />
+          <span style={{ font: `italic 800 22px/1 ${DISPLAY}` }}>{streak}</span>
         </div>
       </div>
     </div>

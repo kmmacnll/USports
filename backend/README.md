@@ -90,10 +90,10 @@ users as a live play-by-play. All code is in `src/battles/`.
 | `ladder.ts` | Elo, weekly division cohorts, weekly reset, `/ladder/me`, `/me/stats` |
 | `realtime.ts` | WebSocket hub (`ws`) |
 | `scheduler.ts` | runs `tick()` every second; recomputes ratings when stats change |
-| `dev/` | fake players for every sport (`npm run dev:seed`) |
+| `dev/` | dev users and a ratings run (`npm run dev:seed`); no fictional athletes |
 
 ```bash
-npm run dev:seed                 # fictional schools/players/games for every sport + a ratings run + dev_alice/dev_bob
+npm run dev:seed                 # dev_alice/dev_bob + a ratings run over ingested athletes (removes old fictional dev data)
 npm run ratings:dev -- --force   # recompute ratings now (normally automatic)
 npm run ratings:top25            # top 25 per sport + the OVR distribution, for sanity checks
 npx tsx src/battles/sim/calibrate.ts hockey 10000   # win rates / scores / OT / timing at +0, +5, +10 OVR
