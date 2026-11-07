@@ -15,6 +15,7 @@ from .db import Jsonb
 from .normalize import position_tokens
 from .seasons import current_season, validate_season
 from .sports import SportAdapter, get_adapter
+from .rebuild import rebuild_missing_games
 from .transform import build_schedule
 
 if TYPE_CHECKING:
@@ -89,6 +90,9 @@ def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
     frames = frames or load_frames(adapter, season, source_dir, source)
 
     teams, games = build_schedule(frames.schedule, season)
+    # Games the schedule feed left out but whose box scores exist.
+    rebuilt, rebuild_counts = rebuild_missing_games(frames.players, games, teams, season)
+    games = games + rebuilt
     result = adapter.build_lines(frames.players, games)
     lines, team_seasons, line_counts = result.lines, result.team_seasons, result.counts
     for t in teams:
@@ -198,7 +202,7 @@ def sync_athletes_and_stats(sport_code: str, season: str | None = None, *,
             "athletes_seen": len(latest), "athletes_new": new_athletes, "merged_lines": merged_lines,
             "identity": reasons, "identity_keys_added": n_keys,
             "stat_lines": len(stat_rows), "stat_lines_inserted": inserted, "stat_lines_updated": updated,
-            "skipped_non_member_lines": skipped_non_member, "box_rows": line_counts, **scored,
+            "skipped_non_member_lines": skipped_non_member, "box_rows": line_counts, **rebuild_counts, **scored,
         }
         return summary
     finally:

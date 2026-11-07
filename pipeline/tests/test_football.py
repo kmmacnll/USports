@@ -80,3 +80,13 @@ def test_half_ppr_score_of_a_receiver():
     weights = {f"{g}_{k}": w for g, ks in rules.items() for k, w in ks.items()}
     wr = next(l for l in build_football_lines(frames(), [GAME]).lines if l.full_name == "Wide Out")
     assert sum(wr.stats.get(k, 0) * w for k, w in weights.items()) == 14.5
+
+
+def test_defence_2025_26_export_names_its_team_column_team():
+    """The 2025-26 defence file has `team`, not `team_name`; those lines must not be dropped."""
+    f = frames()
+    f["defence"] = f["defence"].rename(columns={"team_name": "team"})
+    res = build_football_lines(f, [GAME])
+    d = {l.full_name: l for l in res.lines}["Devon Crenshaw"]
+    assert d.team_slug == "toronto" and d.stats["defence_interceptions"] == 1
+    assert res.counts["no_team"] == 1          # only "Elsewhere U"
