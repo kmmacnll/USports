@@ -1,0 +1,48 @@
+/* VarsityHQ mobile app (from the "VarsityHQ App" Claude Design handoff).
+   Scoped under .vhq so the rest of the site keeps its teal theme. */
+.vhq {
+  font-family: Manrope, system-ui, sans-serif;
+  color: #F2F4F8;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+:where(.vhq) *, :where(.vhq) *::before, :where(.vhq) *::after { box-sizing: border-box; }
+:where(.vhq) :where(h1, h2, h3, p) { margin: 0; font: inherit; }
+:where(.vhq) :where(h1, h2, h3) { font-weight: 800; }
+:where(.vhq) :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
+:where(.vhq) :where(button[aria-disabled="true"]) { cursor: default; }
+.vhq :focus-visible { outline: 2px solid #8EB1F5; outline-offset: 2px; }
+
+.vhq-input { all: unset; color: #F2F4F8; box-sizing: border-box; }
+.vhq-input::placeholder { color: #64708A; }
+.vhq-input::-webkit-search-cancel-button { display: none; }
+
+.vhq-noscroll { scrollbar-width: none; }
+.vhq-noscroll::-webkit-scrollbar { display: none; }
+.vhq-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Rows in a rounded list get a hairline above every row but the first. */
+.vhq-list > * + * { border-top: 1px solid rgba(255,255,255,.05); }
+.vhq-row { transition: background .15s; }
+.vhq-row:active { background: #15203A; }
+.vhq-press { transition: transform .12s ease; }
+.vhq-press:active:not([aria-disabled="true"]) { transform: scale(.98); }
+.vhq-link { color: #D93A40; }
+.vhq-link:hover { color: #F06A6E; }
+.vhq-kicker { font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #93A0B8; }
+
+.vhq-icon {
+  font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal; line-height: 1; letter-spacing: normal;
+  text-transform: none; white-space: nowrap; direction: ltr; font-feature-settings: 'liga'; display: inline-block; user-select: none;
+}
+.vhq-pulse { animation: vhq-pulse 1.4s infinite; }
+
+@keyframes vhq-pulse { 0% { box-shadow: 0 0 0 0 rgba(76,195,138,.55) } 100% { box-shadow: 0 0 0 6px rgba(76,195,138,0) } }
+@keyframes vhq-up { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes vhq-sheet { from { transform: translateY(100%) } to { transform: none } }
+@keyframes vhq-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes vhq-toast { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+
+@media (prefers-reduced-motion: reduce) {
+  .vhq *, .vhq *::before, .vhq *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
