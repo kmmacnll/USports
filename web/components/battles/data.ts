@@ -73,34 +73,9 @@ export type Division = (typeof DIVISIONS)[number];
 // ---------- People ----------
 const TINTS = ['#3A7BD5', '#2E9E6A', '#8E3B46', '#C46A2B', '#6B4FB8', '#B23A48', '#5F7488', '#2F8F5B', '#2F5FA8', '#A8862B'];
 export const avatarBg = (tint: string) => `radial-gradient(circle at 35% 30%,${tint},#13203A 75%)`;
-export const avatarAt = (i: number) => avatarBg(TINTS[i % TINTS.length]!);
-export const ME = { user: 'kmac', ini: 'KM', bg: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', div: 'Varsity II', elo: 1482 };
-
 export interface Opponent { user: string; ini: string; bg: string; line: string; ai?: boolean }
-export const JAYBIRD: Opponent = { user: 'jaybird', ini: 'JB', bg: avatarBg('#3A7BD5'), line: 'Varsity I · 1,531' };
+/** The house AI. Ranked and friend opponents come from the API once Battles is wired to it. */
 export const AI_OPP: Opponent = { user: 'VarsityHQ AI', ini: 'AI', bg: avatarBg('#5F7488'), line: 'Unranked', ai: true };
-
-export interface Friend { name: string; ini: string; tint: string; sub: string; online: boolean; busy: boolean }
-export const FRIENDS: Friend[] = [
-  { name: 'jaybird', ini: 'JB', tint: '#3A7BD5', sub: 'Varsity I · 1,531', online: true, busy: false },
-  { name: 'jay_dangles', ini: 'JD', tint: '#2E9E6A', sub: 'Starter III · 1,204', online: true, busy: false },
-  { name: 'jaylynn.k', ini: 'JK', tint: '#6B4FB8', sub: 'All-Star II · 1,702', online: false, busy: true },
-  { name: 'jayden_ice', ini: 'JI', tint: '#C46A2B', sub: 'Bench I · 980', online: false, busy: false },
-];
-
-export interface InboxItem {
-  id: string; title: string; sub: string; chip: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED'; ini: string; tint: number;
-}
-export const INBOX: InboxItem[] = [
-  { id: 'n1', title: '@jaybird challenged you', sub: "Hockey · Women's · Unranked · expires in 1 min", chip: 'PENDING', ini: 'JB', tint: 0 },
-  { id: 'n2', title: '@puckluck accepted', sub: "You won 5–2 · Basketball · Men's", chip: 'ACCEPTED', ini: 'PL', tint: 1 },
-  { id: 'n3', title: '@topshelf_tess declined', sub: "Soccer · Women's", chip: 'DECLINED', ini: 'TT', tint: 4 },
-  { id: 'n4', title: '@five_hole_fi challenged you', sub: "Hockey · Men's · yesterday", chip: 'EXPIRED', ini: 'FF', tint: 2 },
-  { id: 'n5', title: '@dangle_dani accepted', sub: "Lost 2–3 · Volleyball · Women's", chip: 'ACCEPTED', ini: 'DD', tint: 5 },
-  { id: 'n6', title: '@icecold_ava challenged you', sub: 'Football · 2 days ago', chip: 'EXPIRED', ini: 'IA', tint: 3 },
-];
-
-export const LADDER_USERS = ['topshelf_tess', 'puckluck', 'five_hole_fi', 'dangle_dani', 'icecold_ava', 'glovesave', 'kmac', 'snipe_city', 'bardown_bea', 'rinkrat_rae', 'slapshot_sky', 'pk_queen', 'breakaway_b', 'hatty_hannah', 'blueline_bo', 'crossbar_cat', 'wrister_wen', 'top_cheese', 'offside_olive', 'zamboni_zoe', 'penalty_pip', 'dump_n_chase', 'clapper_cleo', 'backcheck_bri', 'sin_bin_sam', 'faceoff_fay', 'cherrypick_cj', 'icing_iris', 'lazy_pass_lu', 'pylon_pat'];
 
 export const SPORTS = [
   { id: 'hockey', name: 'Hockey', icon: 'sports_hockey', formation: '3F · 2D · 1G' },
@@ -149,7 +124,7 @@ const lineup = (ids: string[]) => {
 };
 
 /** Builds the full event stream for a drafted matchup. Deterministic for a given seed. */
-export function simulate(teamA: string[], teamB: string[], seed: number, userA = '@kmac', userB = '@jaybird'): Match {
+export function simulate(teamA: string[], teamB: string[], seed: number, userA: string, userB: string): Match {
   const rnd = rng(seed);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!;
   const A = lineup(teamA), B = lineup(teamB);

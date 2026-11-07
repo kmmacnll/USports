@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { clockAt, OT_START, periodOf, player, type Match, type MatchEvent, type Opponent } from './data';
+import { useMe } from './me';
 import { DISPLAY, Icon, PlayerCard } from './ui';
 
 const SIDE = {
@@ -54,7 +55,7 @@ function FeedItem({ e, match, oppName, onResult }: { e: MatchEvent; match: Match
       <div className="vb-tile-gold" style={{ margin: '8px 12px', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span className="vb-display" style={{ fontSize: 26, lineHeight: 1 }}>{match.ot ? 'FINAL · OT' : 'FINAL'}</span>
-          <span style={{ fontSize: 12, color: '#C3CBDA' }}>{win ? '@kmac' : oppName} wins {hi}–{lo}</span>
+          <span style={{ fontSize: 12, color: '#C3CBDA' }}>{win ? 'You win' : `${oppName} wins`} {hi}–{lo}</span>
         </div>
         <button type="button" onClick={onResult} className="vb-btn-primary vb-press" autoFocus style={{ height: 40, padding: '0 14px', borderRadius: 12, display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 800 }}>See result</button>
       </div>
@@ -90,6 +91,7 @@ export function LiveScreen({ match, opp, onResult }: { match: Match; opp: Oppone
   const [speed, setSpeed] = useState(1);
   const online = useOnline();
   const oppName = opp.ai ? opp.user : `@${opp.user}`;
+  const me = useMe();
   const END = match.end;
 
   useEffect(() => { const w = setTimeout(() => setWarm(false), 1200); return () => clearTimeout(w); }, []);
@@ -131,7 +133,7 @@ export function LiveScreen({ match, opp, onResult }: { match: Match; opp: Oppone
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }} aria-live="polite" aria-label={`Score: you ${last?.scoreA ?? 0}, ${oppName} ${last?.scoreB ?? 0}`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800 }}>
-                <span style={{ width: 22, height: 22, borderRadius: 11, background: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', border: '1.5px solid #E5484D', display: 'grid', placeItems: 'center', font: `italic 900 10px ${DISPLAY}` }}>KM</span>@kmac
+                <span style={{ width: 22, height: 22, flex: 'none', borderRadius: 11, background: me.bg, border: '1.5px solid #E5484D', display: 'grid', placeItems: 'center', font: `italic 900 10px ${DISPLAY}` }}>{me.ini}</span><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.handle}</span>
               </span>
               <span key={`a${last?.scoreA}`} style={{ font: `italic 800 54px/0.95 ${DISPLAY}`, fontVariantNumeric: 'tabular-nums', animation: lastGoal?.side === 'A' ? flash : 'none', transformOrigin: 'left center', display: 'inline-block' }}>{last?.scoreA ?? 0}</span>
             </div>

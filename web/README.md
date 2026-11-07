@@ -27,7 +27,7 @@ npm run build && npm start      # production
 | `/scores` | Scores by sport and day (from 3 days back to 4 ahead), grouped Live / Upcoming / Final, with your rostered players' teams marked |
 | `/login` | Email + password sign-in. In local dev, also "continue as" any name |
 | `/signup` | Create an account: name, email, optional university, password, confirm password |
-| `/battles` | Draft Battles (full-screen, mobile-first): home pager, lobby, play a friend, inbox, ranked ladder, matchmaking, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. **Demo only:** fictional Women's Hockey athletes and users, no backend yet. See `components/battles/` |
+| `/battles` | Draft Battles (full-screen, mobile-first): home pager, lobby, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. Play vs AI works; ranked, friends, invites and the ladder say "coming soon" until the web app is wired to the Battles API. Uses a fictional Women's Hockey athlete pool and no made-up users: your name comes from your session and your W–L record is kept on your device. See `components/battles/` |
 
 ## How it talks to the API
 
@@ -58,10 +58,10 @@ npm run build && npm start      # production
 ## Draft Battles (`/battles`)
 
 Built from the "Draft Battles" Claude Design handoff. Everything lives in
-`components/battles/` and `app/battles/`, scoped under the `.vb` class so it
-doesn't touch the rest of the app's teal theme.
+`components/battles/` and `app/battles/`, scoped under the `.vb` class (the
+rest of the app uses the same palette from `app/globals.css`).
 
-- `data.ts`: the fictional player pool, friends, inbox and ladder, plus
+- `data.ts`: the fictional athlete pool and the house AI opponent, plus
   `simulate()`, a seeded match engine that turns two drafted lineups into the
   event stream the live feed plays (`{t, period, clock, type, side, playerIds,
   text, scoreA, scoreB, momentum}`), with sudden-death OT on a tie.
@@ -69,8 +69,12 @@ doesn't touch the rest of the app's teal theme.
   works. Battle screens need in-memory state and fall back to Home on reload.
 - Fonts (Manrope, Barlow Condensed, Material Symbols Rounded) load from Google
   Fonts in `app/battles/layout.tsx`.
-- Not built yet: real matchmaking, invites, Elo and ladder persistence (no API
-  endpoints exist), real U Sports athletes in the draft pool, and sports other
-  than hockey (the lobby shows them as "coming soon").
+- `me.tsx`: the signed-in user (display name from `/me`, passed in by
+  `app/battles/page.tsx`) and your battle record, which is stored in
+  `localStorage` (`vhq.battles.record`) until the UI talks to the API.
+- Not built yet: wiring the UI to the backend's Battles endpoints (matchmaking,
+  friend invites, Elo and the weekly ladder), so ranked, friends, the inbox and
+  the ladder show "coming soon"; real U Sports athletes in the draft pool; and
+  sports other than hockey.
 
 
