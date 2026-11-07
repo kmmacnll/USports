@@ -1,33 +1,120 @@
 @import "tailwindcss";
 
-/* VarsityHQ design tokens: dark-mode-first, electric teal accent. */
+/* VarsityHQ design tokens: the Draft Battles theme (navy, red, glowing tiles),
+   shared by the whole app. app/battles/battles.css holds the same values for
+   the .vb-scoped Battles screens. */
 @theme {
-  --color-accent: #06b6d4;
-  --color-accent-strong: #22d3ee;
-  --color-accent-muted: #0e7490;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-bg: #070B15;
+  --color-bg-2: #0C1628;
+  --color-surface: #111A2A;
+  --color-surface-2: #18233A;
+  --color-navy: #1B3157;
+  --color-navy-500: #2F5596;
+  --color-primary: #D93A40;
+  --color-primary-text: #F2666B;
+  --color-blue: #8EB1F5;
+  --color-live: #FF8A3D;
+  --color-gold: #E9B949;
+  --color-win: #3DD68C;
+  --color-loss: #FF6B7A;
+  --color-ink: #F2F4F8;
+  --color-ink-2: #C3CBDA;
+  --color-ink-3: #93A0B8;
+  --color-ink-4: #8390A8;
+  /* Older class names still used in a few places map onto the new palette. */
+  --color-accent: #8EB1F5;
+  --color-accent-strong: #C9DAFB;
+  --color-accent-muted: #2F5596;
+  --font-sans: Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @layer base {
   :root { color-scheme: dark; }
-  html, body { @apply bg-slate-900 text-slate-100 antialiased; }
+  html, body { @apply bg-bg text-ink antialiased; }
   body {
-    background-image:
-      radial-gradient(60rem 30rem at 10% -10%, rgb(6 182 212 / 0.14), transparent 60%),
-      radial-gradient(50rem 30rem at 110% 10%, rgb(99 102 241 / 0.10), transparent 60%);
+    -webkit-tap-highlight-color: transparent;
+    background:
+      repeating-linear-gradient(135deg, rgba(142,177,245,.035) 0 1px, transparent 1px 22px),
+      radial-gradient(70rem 36rem at 100% -10%, rgba(38,70,128,.55), transparent 62%),
+      radial-gradient(50rem 30rem at -10% 110%, rgba(217,58,64,.14), transparent 60%),
+      linear-gradient(170deg, #0C1628, #070B15);
     background-attachment: fixed;
   }
-  :focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-blue; }
+  input::placeholder { color: var(--color-ink-4); }
+  select option { background: var(--color-surface); }
 }
 
-/* Custom utilities (Tailwind v4: @utility, so they can be composed with @apply). */
-@utility glass { @apply rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 backdrop-blur-md; }
-@utility glass-strong { @apply rounded-2xl border border-white/10 bg-slate-800/70 shadow-xl shadow-black/40 backdrop-blur-md; }
-@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50; }
-@utility btn-primary { @apply btn bg-accent text-slate-950 hover:bg-accent-strong; }
-@utility btn-ghost { @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10; }
-@utility input { @apply w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none; }
-@utility label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400; }
-@utility chip { @apply inline-flex items-center rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-slate-200; }
-@utility section-title { @apply flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-400; }
+/* Glowing tiles (Battles .vb-tile*). */
+@utility tile {
+  border-radius: 20px; border: 1px solid rgba(142,177,245,.22);
+  background: linear-gradient(160deg, rgba(38,62,110,.72), rgba(13,21,38,.9) 70%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 0 28px rgba(142,177,245,.10), 0 12px 28px rgba(0,0,0,.35);
+}
+@utility tile-primary {
+  border-radius: 20px; border: 1px solid rgba(229,72,77,.5);
+  background: linear-gradient(160deg, rgba(130,32,44,.6), rgba(13,21,38,.92) 72%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 0 32px rgba(217,58,64,.22), 0 0 26px rgba(217,58,64,.18), 0 12px 28px rgba(0,0,0,.35);
+}
+@utility tile-blue {
+  border-radius: 20px; border: 1px solid rgba(142,177,245,.45);
+  background: linear-gradient(160deg, rgba(47,85,150,.75), rgba(13,21,38,.92) 72%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 32px rgba(142,177,245,.2), 0 0 26px rgba(142,177,245,.16), 0 12px 28px rgba(0,0,0,.35);
+}
+@utility tile-live {
+  border-radius: 20px; border: 1px solid rgba(255,138,61,.5);
+  background: linear-gradient(160deg, rgba(130,60,20,.5), rgba(13,21,38,.92) 72%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 0 30px rgba(255,138,61,.2), 0 0 22px rgba(255,138,61,.14), 0 12px 28px rgba(0,0,0,.35);
+}
+@utility tile-gold {
+  border-radius: 20px; border: 1px solid rgba(233,185,73,.45);
+  background: linear-gradient(160deg, rgba(120,90,30,.5), rgba(13,21,38,.92) 72%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 0 30px rgba(233,185,73,.18), 0 0 22px rgba(233,185,73,.12), 0 12px 28px rgba(0,0,0,.35);
+}
+/* Rows inside a tile: hairline dividers. */
+@utility rows { & > * + * { border-top: 1px solid rgba(142,177,245,.1); } }
+@utility glass { @apply tile; }
+@utility glass-strong { @apply tile; background: linear-gradient(160deg, rgba(38,62,110,.97), rgba(13,21,38,.98) 70%); }
+@utility press { transition: transform .12s ease; &:active:not(:disabled) { transform: scale(.985); } }
+
+/* Buttons */
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 h-11 text-sm font-extrabold transition disabled:cursor-not-allowed disabled:opacity-50; &:active:not(:disabled) { transform: scale(.985); } }
+@utility btn-primary {
+  @apply btn text-white;
+  background: linear-gradient(180deg, #E5484D, #C8323A);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 0 0 1px rgba(255,255,255,.1), 0 10px 28px rgba(217,58,64,.42);
+}
+@utility btn-secondary {
+  @apply btn text-ink;
+  background: linear-gradient(180deg, rgba(47,85,150,.6), rgba(27,49,87,.6));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 0 1px rgba(142,177,245,.32);
+}
+@utility btn-ghost { @apply btn text-ink-2; box-shadow: inset 0 0 0 1px rgba(142,177,245,.3); &:hover:not(:disabled) { background: rgba(142,177,245,.08); } }
+
+/* Forms */
+@utility input {
+  @apply w-full h-12 rounded-xl px-3.5 text-[15px] text-ink focus:outline-none;
+  background: rgba(7,11,21,.6); border: 1px solid rgba(142,177,245,.2);
+  &:focus { border-color: rgba(142,177,245,.6); }
+}
+@utility label { @apply mb-1.5 block text-[11px] font-extrabold uppercase tracking-[.1em] text-ink-3; }
+@utility chip { @apply inline-flex items-center rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-ink-2; }
+
+/* Type */
+@utility section-title { @apply flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.1em] text-ink-3; }
+@utility display { font-family: var(--font-display); font-style: italic; font-weight: 900; }
+@utility num { font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; }
+@utility no-scrollbar { scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
+
+@keyframes vhq-up { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+@keyframes vhq-sheet { from { transform: translateY(100%) } to { transform: none } }
+@keyframes vhq-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes vhq-pulse { 0% { box-shadow: 0 0 0 0 rgba(255,138,61,.6) } 100% { box-shadow: 0 0 0 7px rgba(255,138,61,0) } }
+@utility enter { animation: vhq-up .3s ease both; }
+@utility sheet-in { animation: vhq-sheet .3s cubic-bezier(.2,.8,.2,1); @media (width >= 40rem) { animation: vhq-up .2s ease; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -1,14 +1,17 @@
-import { Activity, Calendar, Flame, Trophy, Users } from 'lucide-react';
+import { ChevronRight, Plus, Swords } from 'lucide-react';
 import Link from 'next/link';
 
-import { CreateLeagueForm, JoinLeagueForm, TermsForm } from '@/components/dashboard-forms';
+import { LeagueSheetButton, TermsForm } from '@/components/dashboard-forms';
+import { GameGroups } from '@/components/games';
 import { PlayerPopover } from '@/components/player-popover';
 import { SportTabs } from '@/components/sport-tabs';
-import { Card, Empty, SportBadge, fmt } from '@/components/ui';
+import { Empty, SectionHead, SportMark, UniMark, fmt } from '@/components/ui';
 import { api, apiOrNull, getMe } from '@/lib/api';
 import type { Athlete, Game, League, LeagueTeam, Me, Paginated, Roster, Sport } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
+type MyLeague = Awaited<ReturnType<typeof loadMyLeagues>>[number];
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ sport?: string }> }) {
   const [{ data: sports }, me] = await Promise.all([
@@ -23,149 +26,190 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const [leagues, games, top] = await Promise.all([
     me ? loadMyLeagues(me) : Promise.resolve([]),
     activeSport ? api<{ data: Game[] }>('/games', { auth: false, query: { sport_id: activeSport } }) : Promise.resolve({ data: [] }),
-    activeSport ? api<Paginated<Athlete>>('/athletes', { auth: false, query: { sport_id: activeSport, page_size: 8 } }) : null,
+    activeSport ? api<Paginated<Athlete>>('/athletes', { auth: false, query: { sport_id: activeSport, page_size: 5 } }) : null,
   ]);
   const myUniversities = new Set(leagues.filter((l) => l.league.sport === activeSport).flatMap((l) => l.universities));
-  const shownGames = pickGames(games.data, myUniversities, 12);
+  const shownGames = pickGames(games.data, myUniversities, 6);
+  const blocked = me?.is_usports_athlete ? me.athlete_sports : [];
+  const sheet = { sports, defaultSport: activeSport, blocked };
 
-  return (
-    <div className="space-y-6">
-      <Hero me={me} />
-
-      {me?.terms.needs_acceptance && me.terms.current_version && (
-        <Card title="Terms & Conditions" className="border-accent/40">
-          <TermsForm version={me.terms.current_version} sports={sports} />
-        </Card>
-      )}
-
-      {me && (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Card title="My leagues" icon={<Trophy className="size-4 text-accent" />} className="lg:col-span-2">
-            {leagues.length === 0 ? (
-              <Empty>No leagues yet</Empty>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {leagues.map(({ league, team, rank, teams }) => (
-                  <Link key={league.league_id} href={`/leagues/${league.league_id}`}
-                    className="group rounded-xl border border-white/10 bg-slate-950/40 p-4 transition hover:border-accent/50 hover:bg-slate-950/60">
-                    <div className="flex items-center justify-between gap-2">
-                      <SportBadge sport={league.sport} />
-                      <span className="text-xs text-slate-500">{league.team_count}/{league.max_teams} teams</span>
-                    </div>
-                    <p className="mt-2 font-semibold group-hover:text-accent">{league.league_name}</p>
-                    <p className="text-sm text-slate-400">{team?.team_name ?? 'Commissioner'}</p>
-                    {team && (
-                      <div className="mt-3 flex items-end justify-between text-sm">
-                        <span className="text-slate-400">Rank <span className="font-bold text-white">{rank}</span>/{teams}</span>
-                        <span className="tabular-nums"><span className="font-bold text-accent">{fmt(team.roster_points)}</span> pts</span>
-                      </div>
-                    )}
-                    {team && (
-                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
-                        <div className="h-full bg-accent" style={{ width: `${(team.filled / team.roster_size) * 100}%` }} />
-                      </div>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </Card>
-          <div className="space-y-6">
-            <Card title="Create a league" icon={<Users className="size-4 text-accent" />}>
-              <CreateLeagueForm sports={sports} defaultSport={activeSport} />
-            </Card>
-            <Card title="Join a league">
-              <JoinLeagueForm />
-            </Card>
-          </div>
-        </div>
-      )}
-
-      <SportTabs sports={sports} active={activeSport} base="/" />
-
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Card title="Games" icon={<Calendar className="size-4 text-accent" />} className="lg:col-span-3">
-          {games.data.length === 0 ? (
-            <Empty>No games</Empty>
-          ) : (
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {shownGames.map((g) => <GameRow key={g.game_id} game={g} mine={myUniversities} />)}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Top performers" icon={<Flame className="size-4 text-accent" />} className="lg:col-span-2"
-          action={<Link href={`/players?sport=${activeSport}`} className="text-xs text-accent hover:underline">All players</Link>}>
-          {!top || top.data.length === 0 ? (
-            <Empty>No stats yet</Empty>
-          ) : (
-            <ol className="space-y-1">
-              {top.data.map((a, i) => (
-                <li key={a.athlete_id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
-                  <span className="w-5 text-right text-xs font-bold text-slate-500">{i + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <PlayerPopover athleteId={a.athlete_id} columns={sport!.stat_columns}>
-                      <span className="font-medium">{a.first_name} {a.last_name}</span>
-                    </PlayerPopover>
-                    <p className="truncate text-xs text-slate-500">{a.university} · {a.stats.games_played} GP</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold tabular-nums text-accent">{fmt(a.stats.fantasy_points_avg)}</p>
-                    <p className="text-[10px] uppercase text-slate-500">FP/G</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
+  const performers = (
+    <section className="space-y-2">
+      <SectionHead title="Top performers" action={<Link href={`/players?sport=${activeSport}`} className="text-[13px] font-bold text-primary-text">All players</Link>} />
+      <div className="tile rows overflow-hidden">
+        {!top || top.data.length === 0 ? <Empty>No stats yet</Empty> : top.data.map((a, i) => (
+          <PlayerPopover key={a.athlete_id} athleteId={a.athlete_id} columns={sport!.stat_columns} className="w-full">
+            <span className="flex min-h-[60px] items-center gap-3 px-4 py-2.5">
+              <span className="num w-4 text-right text-[15px] text-ink-4">{i + 1}</span>
+              <UniMark name={a.university} id={a.university_id} size={34} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14.5px] font-bold text-ink">{a.first_name} {a.last_name}</span>
+                <span className="block truncate text-xs font-semibold text-ink-3">{[a.position, a.university, `${a.stats.games_played} GP`].filter(Boolean).join(' · ')}</span>
+              </span>
+              <span className="flex flex-col items-end leading-none">
+                <span className="num text-[22px] text-blue">{fmt(a.stats.fantasy_points_avg)}</span>
+                <span className="mt-1 text-[9.5px] font-extrabold tracking-[.06em] text-ink-4">FP/G</span>
+              </span>
+            </span>
+          </PlayerPopover>
+        ))}
       </div>
-    </div>
+    </section>
   );
-}
 
-function Hero({ me }: { me: Me | null }) {
-  if (me) {
+  const scores = (
+    <section className="space-y-2">
+      <SectionHead title={`Scores · ${sport?.sport_name ?? ''}`} action={<Link href={`/scores?sport=${activeSport}`} className="text-[13px] font-bold text-primary-text">All scores</Link>} />
+      {shownGames.length === 0 ? <div className="tile"><Empty>No games this week</Empty></div> : <GameGroups games={shownGames} mine={myUniversities} />}
+    </section>
+  );
+
+  if (!me) {
     return (
-      <div className="flex items-end justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{me.display_name}</h1>
-        <Activity className="hidden size-8 text-accent/60 sm:block" />
+      <div className="space-y-6">
+        <section className="tile-blue enter relative overflow-hidden px-5 pb-6 pt-8 sm:px-10 sm:py-12">
+          <Streaks />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/battles/varsityhq-logo-dark.png" alt="" className="relative mb-5 h-20 w-auto drop-shadow-[0_12px_30px_rgba(0,0,0,.5)] sm:h-24" />
+          <h1 className="display relative max-w-2xl text-[46px] leading-[.88] sm:text-7xl">Draft real Canadian university athletes.</h1>
+          <p className="relative mt-3 max-w-md text-[15px] font-semibold text-ink-2">Score with real U Sports box scores, all season long.</p>
+          <div className="relative mt-6 grid gap-2.5 sm:flex">
+            <Link href="/signup" className="btn-primary h-[52px] px-8 text-base">Get started</Link>
+            <Link href="/login" className="btn-secondary h-[52px] px-8 text-base">I have an account</Link>
+          </div>
+        </section>
+        <SportTabs sports={sports} active={activeSport} base="/" />
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">{performers}{scores}</div>
       </div>
     );
   }
+
+  const [first] = leagues;
   return (
-    <div className="glass overflow-hidden p-8 sm:p-10">
-      <h1 className="max-w-2xl text-3xl font-black tracking-tight sm:text-5xl">
-        Draft real Canadian university athletes. Score with real box scores.
-      </h1>
-      <Link href="/signup" className="btn-primary mt-6">Get started</Link>
+    <div className="space-y-6">
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-bold text-ink-3">Welcome back</p>
+          <h1 className="display truncate text-[40px] leading-[.95] sm:text-5xl">{me.display_name}</h1>
+        </div>
+        <LeagueSheetButton {...sheet} mode="create" label="Create or join a league"
+          className="grid size-11 flex-none place-items-center rounded-full bg-surface-2 ring-1 ring-blue/20 transition hover:bg-navy">
+          <Plus className="size-5" />
+        </LeagueSheetButton>
+      </div>
+
+      {me.terms.needs_acceptance && me.terms.current_version && (
+        <section className="tile-primary enter p-5"><TermsForm version={me.terms.current_version} sports={sports} /></section>
+      )}
+
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">
+        <div className="space-y-6">
+          {first ? <FeaturedLeague l={first} /> : (
+            <section className="tile-blue enter relative overflow-hidden p-5 sm:p-7">
+              <Streaks />
+              <p className="relative text-[11px] font-extrabold uppercase tracking-[.1em] text-[#C9DAFB]">Season-long · Real box scores</p>
+              <h2 className="display relative mt-2 text-[52px] leading-[.85]">Start a<br />league</h2>
+              <p className="relative mt-2 max-w-xs text-[13px] font-semibold text-ink-2">Create one for your friends, or join with an invite from your commissioner.</p>
+              <div className="relative mt-5 grid grid-cols-2 gap-2.5">
+                <LeagueSheetButton {...sheet} mode="create" className="btn-primary h-12">Create league</LeagueSheetButton>
+                <LeagueSheetButton {...sheet} mode="join" className="btn-secondary h-12">Join with code</LeagueSheetButton>
+              </div>
+            </section>
+          )}
+
+          {leagues.length > 0 && (
+            <section className="space-y-2">
+              <SectionHead id="leagues" title="My leagues"
+                action={<LeagueSheetButton {...sheet} mode="join" className="py-1.5 text-[13px] font-bold text-primary-text">Join with code</LeagueSheetButton>} />
+              <div className="tile rows overflow-hidden">
+                {leagues.map((l) => (
+                  <Link key={l.league.league_id} href={`/leagues/${l.league.league_id}`} className="flex min-h-[68px] items-center gap-3 px-4 py-3 transition hover:bg-white/[.03] active:bg-white/[.05]">
+                    <SportMark sport={l.league.sport} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-extrabold">{l.league.league_name}</span>
+                      <span className="block truncate text-xs font-semibold text-ink-3">{l.team?.team_name ?? 'Commissioner'} · {l.league.team_count}/{l.league.max_teams} teams</span>
+                    </span>
+                    {l.team && (
+                      <span className="flex flex-col items-end leading-none">
+                        <span className="num text-[22px]">#{l.rank}<span className="text-[15px] text-ink-4"> / {l.teams}</span></span>
+                        <span className="mt-1 text-[11px] font-semibold text-ink-3">{fmt(l.team.roster_points)} pts</span>
+                      </span>
+                    )}
+                    <ChevronRight className="size-4 flex-none text-ink-4" />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <Link href="/battles" className="tile-live press flex items-center gap-3.5 px-4 py-3.5">
+            <span className="grid size-11 flex-none place-items-center rounded-xl bg-live/15 text-live"><Swords className="size-6" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="display block text-[26px] leading-none">Draft Battles</span>
+              <span className="block text-xs font-semibold text-ink-2">1v1 · 6 picks · live sim · ~3 min</span>
+            </span>
+            <ChevronRight className="size-5 text-ink-3" />
+          </Link>
+        </div>
+
+        <div className="space-y-6">
+          <SportTabs sports={sports} active={activeSport} base="/" />
+          {performers}
+          {scores}
+        </div>
+      </div>
     </div>
   );
 }
 
-function GameRow({ game, mine }: { game: Game; mine: Set<string> }) {
-  const final = game.status === 'FINAL';
-  const side = (t: Game['home'], other: Game['home']) => (
-    <div className="flex items-center justify-between gap-2">
-      <span className={`flex items-center gap-1.5 truncate ${final && (t.score ?? 0) > (other.score ?? 0) ? 'font-semibold text-white' : 'text-slate-300'}`}>
-        {mine.has(t.name) && <span className="size-2 shrink-0 rounded-full bg-accent" title="Your player's team" />}
-        {t.name}
-      </span>
-      <span className="tabular-nums">{t.score ?? ''}</span>
-    </div>
-  );
+/** Your first league, as the big card at the top of Home. */
+function FeaturedLeague({ l }: { l: MyLeague }) {
+  const { league, team } = l;
+  const fill = team ? team.filled / team.roster_size : 0;
   return (
-    <li className="rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm">
-      <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-        <span>{new Date(`${game.date}T12:00:00`).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-        <span className="flex gap-1">
-          {game.exhibition && <span className="chip">EXH</span>}
-          {game.playoff && <span className="chip bg-accent/20 text-accent">PLAYOFF</span>}
-          <span className={final ? 'text-slate-400' : 'text-accent'}>{final ? 'Final' : 'Upcoming'}</span>
+    <Link href={`/leagues/${league.league_id}`} className="tile-primary press enter relative block overflow-hidden p-5">
+      <Streaks warm />
+      <div className="relative flex items-center justify-between">
+        <span className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.1em] text-ink-2">
+          <span className="size-[7px] rounded-full bg-live" style={{ animation: 'vhq-pulse 1.4s infinite' }} />Season points · {league.season}
         </span>
+        <ChevronRight className="size-5 text-ink-3" />
       </div>
-      {side(game.away, game.home)}
-      {side(game.home, game.away)}
-    </li>
+      <h2 className="display relative mt-3 truncate text-[44px] leading-[.9]">{league.league_name}</h2>
+      <p className="relative mt-1 truncate text-[13px] font-bold text-ink-2">{team?.team_name ?? 'Commissioner'}</p>
+      {team && (
+        <>
+          <div className="relative mt-5 flex items-end justify-between">
+            <span className="leading-none">
+              <span className="num text-[52px] leading-[.8]">#{l.rank}</span>
+              <span className="num text-2xl text-ink-3"> / {l.teams}</span>
+            </span>
+            <span className="text-right leading-none">
+              <span className="num block text-[40px] leading-[.85] text-blue">{fmt(team.roster_points)}</span>
+              <span className="mt-1 block text-[10px] font-extrabold tracking-[.08em] text-ink-3">ROSTER PTS</span>
+            </span>
+          </div>
+          <div className="relative mt-4 space-y-1.5">
+            <div className="flex h-[5px] gap-0.5 overflow-hidden rounded-full">
+              <div className="rounded-full bg-primary" style={{ width: `${fill * 100}%` }} />
+              <div className="flex-1 rounded-full bg-white/10" />
+            </div>
+            <p className="flex justify-between text-[11px] font-bold text-ink-3"><span>Roster {team.filled}/{team.roster_size}</span><span>{league.team_count}/{league.max_teams} teams</span></p>
+          </div>
+        </>
+      )}
+    </Link>
+  );
+}
+
+/** The diagonal light streaks from the Battles hero tiles. */
+function Streaks({ warm = false }: { warm?: boolean }) {
+  const c = warm ? 'rgba(255,138,61,.5)' : 'rgba(142,177,245,.55)';
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-0">
+      <span className="absolute -top-1/3 left-[62%] h-[170%] w-0.5 rotate-[28deg]" style={{ background: `linear-gradient(transparent,${c},transparent)` }} />
+      <span className="absolute -top-1/3 left-[72%] h-[170%] w-px rotate-[28deg]" style={{ background: 'linear-gradient(transparent,rgba(242,244,248,.3),transparent)' }} />
+    </span>
   );
 }
 
