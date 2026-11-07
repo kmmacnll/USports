@@ -22,6 +22,7 @@ npm run build && npm start      # production
 | `/players` | Player directory: search, then filter by university, conference and position; sort; paginate; click a name for the stat popover. The URL holds all filters, so views can be shared |
 | `/login` | Email + password sign-in. In local dev, also "continue as" any name |
 | `/signup` | Create an account: name, email, optional university, password, confirm password |
+| `/battles` | Draft Battles (mobile-first, its own navy/red theme): home pager, lobby, play a friend, inbox, ranked ladder, matchmaking, VS intro, a 6-pick snake draft, a live simulated match feed and the result + share card. **Demo only:** fictional Women's Hockey athletes and users, no backend yet. See `components/battles/` |
 
 ## How it talks to the API
 
@@ -46,3 +47,22 @@ npm run build && npm start      # production
   `universities.conference` is populated; no data source fills it yet.
 - Fantasy head-to-head matchups don't exist in the backend yet, so the
   dashboard shows real U Sports games instead of fantasy matchups.
+
+## Draft Battles (`/battles`)
+
+Built from the "Draft Battles" Claude Design handoff. Everything lives in
+`components/battles/` and `app/battles/`, scoped under the `.vb` class so it
+doesn't touch the rest of the app's teal theme.
+
+- `data.ts`: the fictional player pool, friends, inbox and ladder, plus
+  `simulate()`, a seeded match engine that turns two drafted lineups into the
+  event stream the live feed plays (`{t, period, clock, type, side, playerIds,
+  text, scoreA, scoreB, momentum}`), with sudden-death OT on a tie.
+- The screen is kept in the URL hash (`/battles#ladder`), so browser back
+  works. Battle screens need in-memory state and fall back to Home on reload.
+- Fonts (Manrope, Barlow Condensed, Material Symbols Rounded) load from Google
+  Fonts in `app/battles/layout.tsx`.
+- Not built yet: real matchmaking, invites, Elo and ladder persistence (no API
+  endpoints exist), real U Sports athletes in the draft pool, and sports other
+  than hockey (the lobby shows them as "coming soon").
+
