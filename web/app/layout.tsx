@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
-import { Nav } from '@/components/nav';
-
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -25,7 +23,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block" />
       </head>
       <body className="min-h-dvh font-sans">
-        <Nav />
         <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-5 sm:px-6 sm:pt-8">{children}</main>
       </body>
     </html>

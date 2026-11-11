@@ -1,13 +1,13 @@
 'use client';
 
 import { SPORTS, type SportId } from './data';
-import { BellButton, Chip, Icon, PlayRandomButton, TopBar } from './ui';
+import { Chip, Icon, PlayRandomButton, TopBar } from './ui';
 
 export type Gender = 'M' | 'W';
 
-export function LobbyScreen({ sport, gender, setSport, setGender, onBack, onInbox, onAI, onFriend, poolSize }: {
+export function LobbyScreen({ sport, gender, setSport, setGender, onBack, onAI, onFriend, poolSize }: {
   sport: SportId; gender: Gender; setSport: (s: SportId) => void; setGender: (g: Gender) => void;
-  onBack: () => void; onInbox: () => void; onAI: () => void; onFriend: () => void; poolSize: number;
+  onBack: () => void; onAI: () => void; onFriend: () => void; poolSize: number;
 }) {
   const cur = SPORTS.find((s) => s.id === sport)!;
   const hockey = sport === 'hockey';
@@ -19,7 +19,7 @@ export function LobbyScreen({ sport, gender, setSport, setGender, onBack, onInbo
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <TopBar title="Draft Battle" onBack={onBack} right={<BellButton count={0} onClick={onInbox} />} />
+      <TopBar title="Draft Battle" onBack={onBack} />
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, padding: '8px 16px 0' }}>
         <span className="vb-label" id="sport-label">Choose a sport</span>
         <div role="radiogroup" aria-labelledby="sport-label" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10 }}>
@@ -93,17 +93,6 @@ export function FriendsScreen({ sportName, genderName, onBack, onAI }: { sportNa
       <ComingSoon icon="group_add" title="No friends yet"
         body={`Adding friends and challenging them to a ${genderName} ${sportName} Draft Battle is coming soon.`}
         action={<PlayAIButton onClick={onAI} />} />
-    </div>
-  );
-}
-
-export function InboxScreen({ onBack, onPlay }: { onBack: () => void; onPlay: () => void }) {
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <TopBar title="Inbox" onBack={onBack} />
-      <ComingSoon icon="inbox" title="No invites yet"
-        body="When friend challenges arrive, they’ll show up here."
-        action={<PlayAIButton onClick={onPlay} label="Start a battle" />} />
     </div>
   );
 }
