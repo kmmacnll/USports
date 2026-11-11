@@ -233,15 +233,6 @@ export function TopBar({ title, onBack, right }: { title: string; onBack?: () =>
   );
 }
 
-export function BellButton({ count, onClick }: { count: number; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} aria-label={`Inbox, ${count} new`} style={{ position: 'relative', width: 40, height: 40, borderRadius: 20, background: '#18233A', display: 'grid', placeItems: 'center' }}>
-      <Icon name="notifications" size={20} />
-      {count > 0 && <span style={{ position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, background: '#FF8A3D', color: '#1F0E02', fontSize: 10, fontWeight: 800, display: 'grid', placeItems: 'center' }}>{count}</span>}
-    </button>
-  );
-}
-
 /** Rank / record / streak strip. Everything here is your own: unranked until ranked play exists. */
 export function HudBar({ played, wins, losses, streak }: { played: number; wins: number; losses: number; streak: number }) {
   const pct = played ? Math.round((wins / played) * 100) : 0;

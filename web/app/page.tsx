@@ -60,13 +60,13 @@ async function loadLeagues(me: Me | null): Promise<MyLeague[]> {
   });
 }
 
-/** The whole site is Draft Battles: full-bleed below the 56px header, a phone-width column on larger screens. */
+/** The whole site is Draft Battles: full-bleed, no header, a phone-width column on larger screens. */
 export default async function HomePage() {
   const logos = await loadLogos();
   const [me, women, men] = await Promise.all([getMe(), loadPool('women', logos), loadPool('men', logos)]);
   const leagues = await loadLeagues(me);
   return (
-    <div className="fixed inset-x-0 bottom-0 top-14 z-30 bg-[#05080F]">
+    <div className="fixed inset-0 z-30 bg-[#05080F]">
       <div className="mx-auto h-full w-full max-w-[430px] sm:border-x sm:border-white/10">
         <BattlesApp displayName={me?.display_name ?? null} pools={{ W: women, M: men }} leagues={leagues} />
       </div>

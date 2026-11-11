@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
 
+import { signOut } from '@/lib/actions';
+
 import type { Player } from './data';
 import type { MyLeague } from './leagues';
 import { useMe, useRecord } from './me';
-import { BellButton, DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip, SchoolLogo } from './ui';
+import { DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip, SchoolLogo } from './ui';
 
 const PAGES = ['Play', 'Discover', 'Profile'] as const;
 
@@ -50,7 +52,7 @@ function Hero({ tone, chip, title, sub, onClick, href }: {
 }
 
 export function HomeScreen({ go, pool, leagues }: {
-  go: (to: 'lobby' | 'ladder' | 'friends' | 'inbox' | 'leagues' | 'ai') => void; pool: Player[]; leagues: MyLeague[];
+  go: (to: 'lobby' | 'ladder' | 'friends' | 'leagues' | 'ai') => void; pool: Player[]; leagues: MyLeague[];
 }) {
   const me = useMe();
   const rec = useRecord();
@@ -79,9 +81,6 @@ export function HomeScreen({ go, pool, leagues }: {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 6px 18px', flex: 'none' }}>
         <Logo height={40} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <BellButton count={0} onClick={() => go('inbox')} />
-        </div>
       </div>
       <HudBar played={rec.played} wins={rec.wins} losses={rec.losses} streak={rec.streak} />
 
@@ -199,7 +198,13 @@ export function HomeScreen({ go, pool, leagues }: {
             </Tile>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, flex: 'none', paddingBottom: 6 }}>
-            <div className="vb-tile" style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}><Icon name="settings" size={20} color="#93A0B8" />Settings</div>
+            {me.signedIn ? (
+              <form action={signOut} style={{ display: 'contents' }}>
+                <button type="submit" className="vb-tile vb-press" style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}><Icon name="logout" size={20} color="#93A0B8" />Sign out</button>
+              </form>
+            ) : (
+              <Link href="/login" className="vb-tile vb-press" style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: 'inherit', textDecoration: 'none' }}><Icon name="login" size={20} color="#93A0B8" />Sign in</Link>
+            )}
             <div className="vb-tile" style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}><Icon name="share" size={20} color="#93A0B8" />Follow Us</div>
           </div>
         </section>

@@ -6,14 +6,14 @@ import { AI_OPP, setPool, simulate, SPORTS, type Match, type Player, type SportI
 import { DraftScreen } from './draft';
 import { HomeScreen } from './home';
 import { LiveScreen } from './live';
-import { FriendsScreen, InboxScreen, LobbyScreen, type Gender } from './lobby';
+import { FriendsScreen, LobbyScreen, type Gender } from './lobby';
 import { VsScreen } from './match';
 import { battleUser, MeProvider, recordResult } from './me';
 import { LeaguesScreen, type MyLeague } from './leagues';
 import { LadderScreen, ResultScreen } from './result';
 
-type Screen = 'home' | 'lobby' | 'friends' | 'inbox' | 'ladder' | 'leagues' | 'vs' | 'draft' | 'live' | 'result';
-const LINKABLE = ['home', 'lobby', 'friends', 'inbox', 'ladder', 'leagues'] as const;
+type Screen = 'home' | 'lobby' | 'friends' | 'ladder' | 'leagues' | 'vs' | 'draft' | 'live' | 'result';
+const LINKABLE = ['home', 'lobby', 'friends', 'ladder', 'leagues'] as const;
 
 /**
  * Draft Battles. Only Play AI is live in the web app: ranked queues, friends,
@@ -62,11 +62,10 @@ export function BattlesApp({ displayName, pools, leagues }: {
   switch (screen) {
     case 'home': body = home; break;
     case 'lobby':
-      body = <LobbyScreen sport={sport} gender={gender} setSport={setSport} setGender={setGender} onBack={back} onInbox={() => nav('inbox')}
+      body = <LobbyScreen sport={sport} gender={gender} setSport={setSport} setGender={setGender} onBack={back}
         onAI={playAI} onFriend={() => nav('friends')} poolSize={poolSize} />;
       break;
     case 'friends': body = <FriendsScreen sportName={sportName} genderName={genderName} onBack={back} onAI={playAI} />; break;
-    case 'inbox': body = <InboxScreen onBack={back} onPlay={() => nav('lobby', true)} />; break;
     case 'leagues': body = <LeaguesScreen leagues={leagues} signedIn={me.signedIn} onBack={back} />; break;
     case 'ladder': body = <LadderScreen onBack={back} onPlay={() => nav('lobby', true)} />; break;
     case 'vs': body = <VsScreen opp={AI_OPP} onDone={() => nav('draft', true)} />; break;
