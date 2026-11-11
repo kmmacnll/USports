@@ -65,7 +65,7 @@ export function BattlesApp({ displayName, pools, leagues }: {
       body = <LobbyScreen sport={sport} gender={gender} setSport={setSport} setGender={setGender} onBack={back}
         onAI={playAI} onFriend={() => nav('friends')} poolSize={poolSize} />;
       break;
-    case 'friends': body = <FriendsScreen sportName={sportName} genderName={genderName} onBack={back} onAI={playAI} />; break;
+    case 'friends': body = <FriendsScreen onBack={back} onAI={playAI} />; break;
     case 'leagues': body = <LeaguesScreen leagues={leagues} signedIn={me.signedIn} onBack={back} />; break;
     case 'ladder': body = <LadderScreen onBack={back} onPlay={() => nav('lobby', true)} />; break;
     case 'vs': body = <VsScreen opp={AI_OPP} onDone={() => nav('draft', true)} />; break;

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { signOut } from '@/lib/actions';
 
@@ -27,8 +27,8 @@ const TileSub = ({ children, color = '#93A0B8' }: { children: ReactNode; color?:
   <span style={{ fontSize: 11.5, fontWeight: 700, color, display: 'flex', alignItems: 'center', gap: 5, textAlign: 'center' }}>{children}</span>
 );
 
-function Hero({ tone, chip, title, sub, onClick, href }: {
-  tone: 'primary' | 'blue'; chip: ReactNode; title: [string, string]; sub: string; onClick?: () => void; href?: string;
+function Hero({ tone, title, onClick, href }: {
+  tone: 'primary' | 'blue'; title: string[]; onClick?: () => void; href?: string;
 }) {
   const accent = tone === 'primary' ? 'rgba(255,138,61,.55)' : 'rgba(142,177,245,.6)';
   const body = (
@@ -38,9 +38,7 @@ function Hero({ tone, chip, title, sub, onClick, href }: {
       {/* Placeholder for the illustrated athlete cutout. */}
       <div aria-hidden style={{ position: 'absolute', right: -28, bottom: 0, width: 190, height: 236, clipPath: 'polygon(34% 0,74% 0,92% 22%,100% 100%,0 100%,10% 46%)', background: 'repeating-linear-gradient(135deg,rgba(142,177,245,.2) 0 6px,rgba(142,177,245,.07) 6px 12px)' }} />
       <div style={{ position: 'relative', padding: 18, display: 'flex', flexDirection: 'column', gap: 10, height: '100%', alignItems: 'flex-start', textAlign: 'left' }}>
-        {chip}
-        <span className="vb-display" style={{ fontSize: 60, lineHeight: 0.84, textShadow: tone === 'primary' ? '0 4px 24px rgba(217,58,64,.45)' : '0 4px 24px rgba(0,0,0,.6)' }}>{title[0]}<br />{title[1]}</span>
-        <span style={{ marginTop: 'auto', fontSize: 12.5, fontWeight: 700, color: '#C3CBDA' }}>{sub}</span>
+        <span className="vb-display" style={{ fontSize: 60, lineHeight: 0.84, textShadow: tone === 'primary' ? '0 4px 24px rgba(217,58,64,.45)' : '0 4px 24px rgba(0,0,0,.6)' }}>{title.map((t, i) => <span key={i} style={{ display: 'block' }}>{t}</span>)}</span>
       </div>
     </>
   );
@@ -72,6 +70,17 @@ export function HomeScreen({ go, pool, leagues }: {
   const none = <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>No ratings yet</span>;
   const [page, setPage] = useState(0);
   const pager = useRef<HTMLDivElement>(null);
+  // Track the visible page with an IntersectionObserver: iOS Safari's scroll-snap
+  // doesn't reliably fire scroll events for the final snapped position.
+  useEffect(() => {
+    const el = pager.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) setPage([...el.children].indexOf(e.target));
+    }, { root: el, threshold: 0.6 });
+    for (const c of el.children) io.observe(c);
+    return () => io.disconnect();
+  }, []);
   const scrollTo = (k: number) => {
     const el = pager.current;
     if (el) el.scrollTo({ left: k * el.clientWidth, behavior: 'smooth' });
@@ -79,36 +88,32 @@ export function HomeScreen({ go, pool, leagues }: {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 6px 18px', flex: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(12px + env(safe-area-inset-top)) 16px 6px 18px', flex: 'none' }}>
         <Logo height={40} />
       </div>
       <HudBar played={rec.played} wins={rec.wins} losses={rec.losses} streak={rec.streak} />
 
       <div ref={pager} className="no-scrollbar" aria-label="Home pages"
-        onScroll={(e) => { const el = e.currentTarget; const p = Math.round(el.scrollLeft / el.clientWidth); if (p !== page) setPage(p); }}
         style={{ flex: 1, minHeight: 0, display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory' }}>
 
         {/* PAGE 1 · PLAY */}
         <section aria-label="Play" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
-          <Hero tone="primary" onClick={() => go('lobby')} title={['Draft', 'Battle']} sub="6 picks · live sim · ~3 min"
-            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(255,138,61,.18)', color: '#FF8A3D', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#FF8A3D', animation: 'vpulse 1.4s infinite' }} />1V1 · VS AI</span>} />
+          <Hero tone="primary" onClick={() => go('lobby')} title={['Battles']} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(132px,1fr)', gap: 12, flex: 1, paddingBottom: 6 }}>
             <Tile onClick={() => go('ladder')} label="Ranked Ladder">
               <DivisionBadge tier="Walk-On" size={54} locked />
               <TileTitle>Ranked Ladder</TileTitle>
-              <TileSub>Unranked · coming soon</TileSub>
+              <TileSub>Coming soon</TileSub>
             </Tile>
             <Tile onClick={() => go('ai')} label="Quick Play versus AI">
               <Icon name="smart_toy" size={44} fill color="#8EB1F5" />
               <TileTitle>Quick Play</TileTitle>
-              <TileSub>vs AI · Unranked</TileSub>
             </Tile>
             <Tile>
               {recent.length
                 ? <div style={{ display: 'flex', gap: 5 }}>{recent.map((r, i) => <ResultPip key={i} r={r} />)}</div>
                 : <Icon name="history" size={40} color="#8EB1F5" />}
               <TileTitle>Recent Battles</TileTitle>
-              <TileSub>{rec.played ? `${rec.wins}–${rec.losses} vs AI` : 'No battles yet'}</TileSub>
             </Tile>
             <Tile onClick={() => go('friends')} label="Friends">
               <Icon name="group_add" size={42} fill color="#8EB1F5" />
@@ -120,9 +125,7 @@ export function HomeScreen({ go, pool, leagues }: {
 
         {/* PAGE 2 · DISCOVER */}
         <section aria-label="Discover" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
-          <Hero tone="blue" onClick={() => go('leagues')} title={['My', 'Leagues']}
-            sub={leagues.length ? `${leagues.length === 1 ? '1 league' : `${leagues.length} leagues`} · ${leagues[0]!.name}${leagues[0]!.rank ? ` #${leagues[0]!.rank}` : ''}` : 'Season-long fantasy leagues'}
-            chip={<span style={{ height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(142,177,245,.2)', color: '#C9DAFB', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', display: 'flex', alignItems: 'center' }}>SEASON-LONG</span>} />
+          <Hero tone="blue" onClick={() => go('leagues')} title={['Fantasy']} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'minmax(132px,1fr)', gap: 12, flex: 1, paddingBottom: 6 }}>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
               {risers.length ? risers.map((p) => (
@@ -140,7 +143,6 @@ export function HomeScreen({ go, pool, leagues }: {
                 </div>
               ) : <Icon name="star" size={44} fill color="#E9B949" />}
               <TileTitle>Top Rated</TileTitle>
-              <TileSub color="#E9B949">{pool.length ? `${pool.length} rated athletes` : 'No ratings yet'}</TileSub>
             </Tile>
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
               {schools.length ? schools.map((sc, i) => (
@@ -169,7 +171,6 @@ export function HomeScreen({ go, pool, leagues }: {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
               <span className="vb-display" style={{ fontSize: 32, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.handle}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#C3CBDA' }}>Unranked</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8' }}>{rec.played ? `${rec.wins}–${rec.losses} · best streak ${rec.best}` : 'No battles yet'}</span>
             </div>
             <DivisionBadge tier="Walk-On" size={52} locked />
           </div>
@@ -177,12 +178,10 @@ export function HomeScreen({ go, pool, leagues }: {
             <Tile>
               <span className="vb-display" style={{ fontSize: 46, lineHeight: 0.9 }}>{rec.played}</span>
               <TileTitle>My Battles</TileTitle>
-              <TileSub>vs AI · this device</TileSub>
             </Tile>
             <Tile>
               <span className="vb-display" style={{ fontSize: 46, lineHeight: 0.9, color: '#8EB1F5' }}>{rec.played ? `${Math.round((rec.wins / rec.played) * 100)}%` : '—'}</span>
               <TileTitle>My Stats</TileTitle>
-              <TileSub>{rec.played ? `Win rate · ${rec.wins}–${rec.losses}` : 'Win rate'}</TileSub>
             </Tile>
             <Tile>
               <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
@@ -205,12 +204,12 @@ export function HomeScreen({ go, pool, leagues }: {
             ) : (
               <Link href="/login" className="vb-tile vb-press" style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: 'inherit', textDecoration: 'none' }}><Icon name="login" size={20} color="#93A0B8" />Sign in</Link>
             )}
-            <div className="vb-tile" style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}><Icon name="share" size={20} color="#93A0B8" />Follow Us</div>
+            <a href="https://www.instagram.com/varsityhqapp/" target="_blank" rel="noopener noreferrer" className="vb-tile vb-press" style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: 'inherit', textDecoration: 'none' }}><Icon name="share" size={20} color="#93A0B8" />Follow Us</a>
           </div>
         </section>
       </div>
 
-      <div role="tablist" aria-label="Home page" style={{ height: 46, flex: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
+      <div role="tablist" aria-label="Home page" style={{ flex: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, paddingTop: 10, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
         {PAGES.map((name, k) => (
           <button key={name} type="button" role="tab" aria-selected={page === k} aria-label={name} onClick={() => scrollTo(k)}
             style={{ width: page === k ? 24 : 8, height: 8, borderRadius: 4, background: page === k ? '#F2F4F8' : 'rgba(242,244,248,.3)', transition: 'all .25s' }} />
