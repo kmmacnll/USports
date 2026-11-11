@@ -58,5 +58,12 @@ export async function signInAsDevUser(_: unknown, form: FormData): Promise<Actio
 
 export async function signOut() {
   await clearSession();
-  redirect('/');
+  redirect('/login');
+}
+
+// ---- profile
+
+export async function updateProfile(patch: { display_name?: string; avatar_data_url?: string | null }): Promise<ActionResult> {
+  const result = await run(() => api('/me', { method: 'PATCH', body: patch }));
+  return result.ok ? { ok: true, data: undefined } : result;
 }

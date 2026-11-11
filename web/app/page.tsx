@@ -1,4 +1,5 @@
 import { readdir } from 'node:fs/promises';
+import { redirect } from 'next/navigation';
 import path from 'node:path';
 
 import { BattlesApp } from '@/components/battles/battles-app';
@@ -24,7 +25,7 @@ async function loadLogos(): Promise<Set<string>> {
   }
 }
 
-/** Real U Sports hockey players with Draft Battles ratings. Empty until the ratings job has run. */
+/** The top 200 U Sports hockey players by fantasy points per game this season. */
 async function loadPool(gender: 'women' | 'men', logos: Set<string>): Promise<Player[]> {
   try {
     const res = await api<{ data: ApiPlayer[] }>('/players', { auth: false, revalidate: 300, query: { sport: 'hockey', gender, page_size: 200 } });
@@ -62,13 +63,16 @@ async function loadLeagues(me: Me | null): Promise<MyLeague[]> {
 
 /** The whole site is Draft Battles: full-bleed, no header, a phone-width column on larger screens. */
 export default async function HomePage() {
+  // Signed-out visitors (including right after signing out) go to the login screen.
+  const me = await getMe();
+  if (!me) redirect('/login');
   const logos = await loadLogos();
-  const [me, women, men] = await Promise.all([getMe(), loadPool('women', logos), loadPool('men', logos)]);
+  const [women, men] = await Promise.all([loadPool('women', logos), loadPool('men', logos)]);
   const leagues = await loadLeagues(me);
   return (
     <div className="fixed inset-0 z-30 bg-[#05080F]">
       <div className="mx-auto h-full w-full max-w-[430px] sm:border-x sm:border-white/10">
-        <BattlesApp displayName={me?.display_name ?? null} pools={{ W: women, M: men }} leagues={leagues} />
+        <BattlesApp displayName={me.display_name} avatar={me.avatar_url ?? null} pools={{ W: women, M: men }} leagues={leagues} />
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ export interface University { university_id: string; name: string; conference: s
 export interface Me {
   user_id: string;
   display_name: string;
+  avatar_url: string | null;
   university: { university_id: string; name: string } | null;
   teams: { team_id: string; team_name: string; league_id: string; league_name: string; sport: string }[];
 }

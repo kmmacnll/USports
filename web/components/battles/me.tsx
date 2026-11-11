@@ -3,12 +3,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 /** The signed-in player as Battles shows them. Comes from the session, never made up. */
-export interface BattleUser { name: string; handle: string; ini: string; bg: string; signedIn: boolean }
+export interface BattleUser { name: string; handle: string; ini: string; bg: string; signedIn: boolean; avatar: string | null }
 
-export function battleUser(displayName: string | null): BattleUser {
+export function battleUser(displayName: string | null, avatar: string | null = null): BattleUser {
   const name = displayName?.trim() || 'You';
   const ini = displayName ? name.split(/\s+/).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') : '?';
-  return { name, handle: displayName ? name : 'You', ini, bg: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', signedIn: !!displayName };
+  return { name, handle: displayName ? name : 'You', ini, bg: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', signedIn: !!displayName, avatar };
 }
 
 const MeCtx = createContext<BattleUser>(battleUser(null));

@@ -178,6 +178,44 @@ describe('auth', () => {
   });
 });
 
+describe('GET /universities', () => {
+  it('lists a school once even when duplicate rows share its name', async () => {
+    await db.query(`INSERT INTO universities (name, slug, is_usports_member) VALUES ('UofA', 'alberta-dup-a', TRUE), ('UofA', 'alberta-dup-b', TRUE)`);
+    try {
+      const res = await request(app).get('/api/v1/universities').expect(200);
+      const names = res.body.data.map((u: { name: string }) => u.name);
+      expect(names.filter((n: string) => n === 'UofA')).toHaveLength(1);
+      expect(new Set(names).size).toBe(names.length);
+    } finally {
+      await db.query(`DELETE FROM universities WHERE slug IN ('alberta-dup-a', 'alberta-dup-b')`);
+    }
+  });
+});
+
+describe('PATCH /me', () => {
+  const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('changes the display name and profile picture, and removes the picture with null', async () => {
+    await ensureUser('settings-user');
+    const res = await request(app).patch('/api/v1/me').set(as('settings-user'))
+      .send({ display_name: '  New Name ', avatar_data_url: pixel }).expect(200);
+    expect(res.body).toMatchObject({ display_name: 'New Name', avatar_url: pixel });
+    const me = await request(app).get('/api/v1/me').set(as('settings-user')).expect(200);
+    expect(me.body).toMatchObject({ display_name: 'New Name', avatar_url: pixel });
+    const cleared = await request(app).patch('/api/v1/me').set(as('settings-user')).send({ avatar_data_url: null }).expect(200);
+    expect(cleared.body).toMatchObject({ display_name: 'New Name', avatar_url: null });
+  });
+
+  it('rejects blank names, non-image pictures, unknown fields and anonymous callers', async () => {
+    await ensureUser('settings-bad');
+    for (const body of [{ display_name: '   ' }, { avatar_data_url: 'data:text/html;base64,PHA+' }, { email: 'x@y.z' }]) {
+      const res = await request(app).patch('/api/v1/me').set(as('settings-bad')).send(body).expect(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    }
+    await request(app).patch('/api/v1/me').send({ display_name: 'Nobody' }).expect(401);
+  });
+});
+
 describe('leagues', () => {
   let hoops: string;
   let inviteCode: string;

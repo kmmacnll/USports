@@ -9,7 +9,7 @@ import { listGames, listUniversities } from '../services/reference.js';
 import {
   addToRoster, availableAthletes, createLeague, dropFromRoster, getLeague, getRoster, joinLeague, listTeams, swap,
 } from '../services/leagues.js';
-import { getMe } from '../services/me.js';
+import { getMe, updateMe } from '../services/me.js';
 import { listSports } from '../services/sports.js';
 
 const sportCode = z.string({ error: 'sport_id is required, e.g. usports_mhk' })
@@ -50,6 +50,13 @@ const SportsQuery = z.preprocess(sportIdAlias, z.object({
   season_type: z.enum(['FALL', 'WINTER', 'SPRING', 'fall', 'winter', 'spring']).transform((v) => v.toUpperCase()).optional(),
   include_inactive: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 }));
+
+const UpdateMeBody = z.object({
+  display_name: z.string().trim().min(1, 'Display name is required').max(40, 'Display name is at most 40 characters').optional(),
+  avatar_data_url: z.string().max(60_000, 'Picture is too large')
+    .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/, 'Picture must be a JPEG, PNG or WebP image')
+    .nullable().optional(),
+}).strict();
 
 const UniversitiesQuery = z.preprocess(sportIdAlias, z.object({ sport: sportCode.optional() }));
 
@@ -136,6 +143,10 @@ export function apiRouter(db: Db): Router {
   // ---- current user
   r.get('/me', async (req, res) => {
     res.json(await getMe(db, requireUser(req).id));
+  });
+
+  r.patch('/me', async (req, res) => {
+    res.json(await updateMe(db, requireUser(req).id, UpdateMeBody.parse(req.body)));
   });
 
   // ---- leagues

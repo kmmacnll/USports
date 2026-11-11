@@ -11,6 +11,8 @@ import { useMe, useRecord } from './me';
 import { DivisionBadge, DISPLAY, HudBar, Icon, Logo, PlayerCard, ResultPip, SchoolLogo } from './ui';
 
 const PAGES = ['Play', 'Discover', 'Profile'] as const;
+// The home pager opens on the middle page (Fantasy) and remembers where you were between screens.
+let lastPage = 1;
 
 function Tile({ children, tone = 'tile', onClick, href, label, style }: {
   children: ReactNode; tone?: 'tile' | 'tile-gold'; onClick?: () => void; href?: string; label?: string; style?: React.CSSProperties;
@@ -50,33 +52,34 @@ function Hero({ tone, title, onClick, href }: {
 }
 
 export function HomeScreen({ go, pool, leagues }: {
-  go: (to: 'lobby' | 'ladder' | 'friends' | 'leagues' | 'ai') => void; pool: Player[]; leagues: MyLeague[];
+  go: (to: 'lobby' | 'ladder' | 'friends' | 'leagues' | 'settings' | 'ai') => void; pool: Player[]; leagues: MyLeague[];
 }) {
   const me = useMe();
   const rec = useRecord();
   const recent = rec.results.slice(-4);
   // Discover tiles, all from the real rated pool.
-  const top = pool.slice().sort((a, b) => b.ovr - a.ovr).slice(0, 2);
+  const top = pool.slice().sort((a, b) => b.fp - a.fp).slice(0, 2);
   const risers = pool.filter((p) => (p.change ?? 0) > 0).sort((a, b) => b.change! - a.change!).slice(0, 3);
   const bySchool = new Map<string, { name: string; tint: string; logo: string | null; ovrs: number[] }>();
   for (const p of pool) {
     const s = bySchool.get(p.schoolName) ?? { name: p.schoolName, tint: p.tint, logo: p.logo, ovrs: [] };
-    s.ovrs.push(p.ovr); bySchool.set(p.schoolName, s);
+    s.ovrs.push(p.fp); bySchool.set(p.schoolName, s);
   }
   // Average of each school's best six (a full lineup), so deep rosters don't win on count alone.
   const schools = [...bySchool.values()].filter((s) => s.ovrs.length >= 3)
     .map((s) => { const best = s.ovrs.sort((a, b) => b - a).slice(0, 6); return { ...s, avg: best.reduce((t, v) => t + v, 0) / best.length }; })
     .sort((a, b) => b.avg - a.avg).slice(0, 3);
-  const none = <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>No ratings yet</span>;
-  const [page, setPage] = useState(0);
+  const none = <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>No games yet</span>;
+  const [page, setPage] = useState(lastPage);
   const pager = useRef<HTMLDivElement>(null);
   // Track the visible page with an IntersectionObserver: iOS Safari's scroll-snap
   // doesn't reliably fire scroll events for the final snapped position.
   useEffect(() => {
     const el = pager.current;
     if (!el) return;
+    el.scrollLeft = lastPage * el.clientWidth;
     const io = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) setPage([...el.children].indexOf(e.target));
+      for (const e of entries) if (e.isIntersecting) { lastPage = [...el.children].indexOf(e.target); setPage(lastPage); }
     }, { root: el, threshold: 0.6 });
     for (const c of el.children) io.observe(c);
     return () => io.disconnect();
@@ -130,9 +133,9 @@ export function HomeScreen({ go, pool, leagues }: {
             <Tile style={{ alignItems: 'stretch', gap: 7, padding: 14 }}>
               {risers.length ? risers.map((p) => (
                 <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 12, fontWeight: 700 }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.last}</span><span style={{ color: '#3DD68C' }}>▲ {p.change}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.last}</span><span style={{ color: '#3DD68C' }}>▲ {p.change!.toFixed(1)}</span>
                 </div>
-              )) : <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>{pool.length ? 'No rating changes yet' : 'No ratings yet'}</span>}
+              )) : <span style={{ fontSize: 12, fontWeight: 700, color: '#93A0B8', textAlign: 'center' }}>{pool.length ? 'No risers this week' : 'No games yet'}</span>}
               <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>Risers</span>
             </Tile>
             <Tile tone="tile-gold">
@@ -166,7 +169,10 @@ export function HomeScreen({ go, pool, leagues }: {
         <section aria-label="Profile" style={{ width: '100%', flex: 'none', scrollSnapAlign: 'start', padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }} className="no-scrollbar">
           <div className="vb-tile-primary" style={{ height: 150, flex: 'none', display: 'flex', alignItems: 'center', gap: 16, padding: '0 18px' }}>
             <div style={{ width: 84, height: 84, borderRadius: '50%', padding: 3, background: 'linear-gradient(160deg,#E5484D,#8EB1F5)', flex: 'none' }}>
-              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', display: 'grid', placeItems: 'center', font: `italic 900 32px ${DISPLAY}` }}>{me.ini}</div>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%,#2F5596,#0C1628 75%)', display: 'grid', placeItems: 'center', font: `italic 900 32px ${DISPLAY}`, overflow: 'hidden' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {me.avatar ? <img src={me.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : me.ini}
+              </div>
             </div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
               <span className="vb-display" style={{ fontSize: 32, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.handle}</span>
@@ -183,12 +189,9 @@ export function HomeScreen({ go, pool, leagues }: {
               <span className="vb-display" style={{ fontSize: 46, lineHeight: 0.9, color: '#8EB1F5' }}>{rec.played ? `${Math.round((rec.wins / rec.played) * 100)}%` : '—'}</span>
               <TileTitle>My Stats</TileTitle>
             </Tile>
-            <Tile>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-                <DivisionBadge tier="Starter" size={30} locked /><DivisionBadge tier="Varsity" size={40} locked /><DivisionBadge tier="All-Star" size={30} locked />
-              </div>
-              <TileTitle>Badges</TileTitle>
-              <TileSub>Coming soon</TileSub>
+            <Tile onClick={() => go('settings')} label="Settings">
+              <Icon name="settings" size={42} fill color="#8EB1F5" />
+              <TileTitle>Settings</TileTitle>
             </Tile>
             <Tile onClick={() => go('friends')} label="Friends">
               <Icon name="group" size={40} fill color="#8EB1F5" />

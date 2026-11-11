@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 
-import type { Division, Player } from './data';
+import { fmtFp, tierFor, type Division, type Player } from './data';
 
 export const DISPLAY = "'Barlow Condensed', 'Arial Narrow', sans-serif";
 
@@ -22,7 +22,7 @@ const TIERS = {
   gold: { f: 'linear-gradient(135deg,#8F6A1E 0%,#F5D982 32%,#A97F2A 58%,#FBE9A8 100%)', ink: '#F2CF6B', glow: 'drop-shadow(0 8px 18px rgba(233,185,73,.25))', label: 'GOLD' },
   elite: { f: 'linear-gradient(135deg,#E9B949 0%,#FFF1C4 18%,#D93A40 42%,#8EB1F5 70%,#E9B949 100%)', ink: '#FFE7A3', glow: 'drop-shadow(0 0 14px rgba(217,58,64,.45)) drop-shadow(0 8px 18px rgba(0,0,0,.4))', label: 'ELITE' },
 };
-export const tierOf = (ovr: number) => (ovr >= 85 ? TIERS.elite : ovr >= 75 ? TIERS.gold : ovr >= 65 ? TIERS.silver : TIERS.bronze);
+export const tierOf = (fp: number) => TIERS[tierFor(fp)];
 
 const CARD_CLIP = 'polygon(0 0,76% 0,100% 16%,100% 87%,50% 100%,0 87%)';
 const CARD_CLIP_IN = 'polygon(0 0,75.5% 0,100% 15.5%,100% 87%,50% 100%,0 87%)';
@@ -41,11 +41,12 @@ export function SchoolLogo({ src, size, style }: { src: string | null; size: num
 export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, dim }: {
   p: Player; size?: 'lg' | 'md' | 'xs' | 'row'; actionLabel?: string; onAction?: () => void; disabled?: boolean; dim?: boolean;
 }) {
-  const T = tierOf(p.ovr);
+  const T = tierOf(p.fp);
+  const fp = fmtFp(p.fp);
   const panel = `linear-gradient(165deg,${p.tint}4D 0%,#111C31 46%,#0A101D 100%)`;
   const avatar = `radial-gradient(circle at 35% 30%,${p.tint}B3,#13203A 72%)`;
   const initials = p.first[0]! + p.last[0]!;
-  const label = `${p.first} ${p.last}, ${p.pos}, overall ${p.ovr}`;
+  const label = `${p.first} ${p.last}, ${p.pos}, ${fp} fantasy points per game`;
 
   if (size === 'xs') {
     return (
@@ -53,7 +54,7 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
         <div style={{ position: 'absolute', inset: 0, clipPath: XS_CLIP, background: T.f }} />
         <div style={{ position: 'absolute', inset: 2, clipPath: XS_CLIP_IN, background: panel, overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(115deg,transparent 36%,rgba(255,255,255,.1) 47%,transparent 58%)' }} />
-          <span style={{ position: 'absolute', top: 4, left: 5, font: `italic 800 17px/0.9 ${DISPLAY}`, color: T.ink }}>{p.ovr}</span>
+          <span style={{ position: 'absolute', top: 4, left: 5, font: `italic 800 ${fp.length > 3 ? 14 : 17}px/0.9 ${DISPLAY}`, color: T.ink }}>{fp}</span>
           <span style={{ position: 'absolute', top: 20, left: 5, font: `800 8px ${DISPLAY}`, letterSpacing: '.1em' }}>{p.pos}</span>
           <span style={{ position: 'absolute', top: 24, right: 5, font: `italic 900 13px ${DISPLAY}`, color: 'rgba(242,244,248,.55)' }}>{initials}</span>
           <span style={{ position: 'absolute', top: 40, left: 2, right: 2, textAlign: 'center', font: `700 8.5px/1 ${DISPLAY}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.last.toUpperCase()}</span>
@@ -73,7 +74,7 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
         <div style={{ width: 40, height: 44, flex: 'none', position: 'relative' }}>
           <div style={{ position: 'absolute', inset: 0, clipPath: 'polygon(0 0,72% 0,100% 20%,100% 82%,50% 100%,0 82%)', background: T.f }} />
           <div style={{ position: 'absolute', inset: 2, clipPath: 'polygon(0 0,71% 0,100% 19%,100% 82%,50% 100%,0 82%)', background: '#0D1526', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ font: `italic 800 17px/1 ${DISPLAY}`, color: T.ink }}>{p.ovr}</span>
+            <span style={{ font: `italic 800 ${fp.length > 3 ? 14 : 17}px/1 ${DISPLAY}`, color: T.ink }}>{fp}</span>
             <span style={{ font: `800 8px ${DISPLAY}`, letterSpacing: '.1em' }}>{p.pos}</span>
           </div>
         </div>
@@ -114,7 +115,8 @@ export function PlayerCard({ p, size = 'lg', actionLabel, onAction, disabled, di
           {p.logo && <SchoolLogo src={p.logo} size={118} style={{ position: 'absolute', top: 14, left: 16, opacity: 0.11, filter: 'grayscale(.2)' }} />}
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(115deg,transparent 36%,rgba(255,255,255,.09) 47%,transparent 58%)' }} />
           <div style={{ position: 'absolute', top: 9, left: 11, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-            <span style={{ font: `italic 800 34px/0.9 ${DISPLAY}`, color: T.ink, letterSpacing: '-.01em' }}>{p.ovr}</span>
+            <span style={{ font: `italic 800 ${fp.length > 3 ? 26 : 32}px/0.9 ${DISPLAY}`, color: T.ink, letterSpacing: '-.01em' }}>{fp}</span>
+            <span style={{ font: `800 8px ${DISPLAY}`, letterSpacing: '.1em', color: '#C3CBDA' }}>FP/G</span>
             <span style={{ font: `800 11px ${DISPLAY}`, letterSpacing: '.14em' }}>{p.pos}</span>
           </div>
           {p.isNew && <span style={{ position: 'absolute', top: 36, right: 8, padding: '2px 6px', borderRadius: 5, background: '#E9B949', color: '#2A1C02', fontSize: 9, fontWeight: 800, letterSpacing: '.08em' }}>NEW</span>}

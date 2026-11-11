@@ -5,11 +5,13 @@ import { getSport } from './sports.js';
 export async function listUniversities(db: Queryable, sportCode?: string) {
   const sportId = sportCode ? (await getSport(db, sportCode)).row.id : null;
   const { rows } = await db.query<{ slug: string; name: string; conference: string | null }>(
-    `SELECT u.slug, u.name, u.conference::text AS conference
+    // One entry per name: duplicate rows for a school (e.g. two spellings that a
+    // migration renamed to the same name) collapse to the row with the most athletes.
+    `SELECT DISTINCT ON (u.name) u.slug, u.name, u.conference::text AS conference
        FROM universities u
       WHERE u.is_usports_member
         AND ($1::smallint IS NULL OR EXISTS (SELECT 1 FROM athletes a WHERE a.university_id = u.id AND a.sport_id = $1))
-      ORDER BY u.name`,
+      ORDER BY u.name, (SELECT count(*) FROM athletes a WHERE a.university_id = u.id) DESC, u.id`,
     [sportId],
   );
   return rows.map((u) => ({ university_id: u.slug, name: u.name, conference: u.conference }));
