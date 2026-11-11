@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { avgOvr, bestPick, DRAFT_PICKS, PICK_SECONDS, player, pool as getPool, slotOpen, type Opponent, type Pos, type Side } from './data';
+import { avgFp, bestPick, DRAFT_PICKS, PICK_SECONDS, player, pool as getPool, slotOpen, type Opponent, type Pos, type Side } from './data';
 import { useMe } from './me';
 import { DISPLAY, EMPTY_SLOT_CLIP, PlayerCard } from './ui';
 
@@ -79,8 +79,8 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
     return () => clearTimeout(t);
   }, [turn, done]);
 
-  const pool = getPool().filter((p) => !taken.includes(p.id) && (filt === 'All' || p.pos === filt)).sort((a, b) => b.ovr - a.ovr);
-  const aA = avgOvr(dA), aB = avgOvr(dB);
+  const pool = getPool().filter((p) => !taken.includes(p.id) && (filt === 'All' || p.pos === filt)).sort((a, b) => b.fp - a.fp);
+  const aA = avgFp(dA), aB = avgFp(dB);
   const ringColor = myTurn ? (clock <= 5 ? '#FF8A3D' : '#E5484D') : '#8EB1F5';
   const ringOffset = done ? 0 : myTurn ? 113.1 * (1 - clock / PICK_SECONDS) : 0;
   const oppName = opp.ai ? opp.user : `@${opp.user}`;
@@ -91,7 +91,7 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
       <div style={{ flex: 'none', padding: '8px 14px 0', display: 'flex', alignItems: 'center', gap: 10, height: 48 }}>
         <span style={{ width: 30, height: 30, borderRadius: 15, background: opp.bg, display: 'grid', placeItems: 'center', font: `italic 900 12px ${DISPLAY}` }}>{opp.ini}</span>
         <span style={{ fontSize: 13.5, fontWeight: 800, flex: 1 }}>{oppName}</span>
-        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: '#93A0B8' }}>AVG OVR</span>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: '#93A0B8' }}>AVG FP/G</span>
         <span className="vb-num" style={{ fontSize: 22, color: '#8EB1F5' }}>{aB ?? '—'}</span>
       </div>
       <div style={{ flex: 'none', padding: '4px 14px 0', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }} aria-label={`${oppName} lineup`}>
@@ -113,7 +113,7 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
             {done ? 'DRAFT COMPLETE' : myTurn ? 'YOUR PICK' : `${oppName.toUpperCase()} PICKING…`}
           </span>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#C3CBDA' }}>
-            {done ? `Avg OVR ${aA} vs ${aB}` : `Pick ${taken.length + 1} of ${DRAFT_PICKS} · ${myTurn ? 'auto-picks best at 0' : 'you’re next'}`}
+            {done ? `Avg FP/G ${aA} vs ${aB}` : `Pick ${taken.length + 1} of ${DRAFT_PICKS} · ${myTurn ? 'auto-picks best at 0' : 'you’re next'}`}
           </span>
         </div>
         {done && (
@@ -127,7 +127,7 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
           <button key={f} type="button" role="radio" aria-checked={filt === f} onClick={() => setFilt(f)}
             style={{ height: 30, padding: '0 12px', borderRadius: 15, fontSize: 12, fontWeight: 800, background: filt === f ? '#F2F4F8' : '#18233A', color: filt === f ? '#0B111D' : '#C3CBDA', display: 'flex', alignItems: 'center' }}>{label}</button>
         ))}
-        <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: '#8390A8', alignSelf: 'center' }}>BY OVR</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: '#8390A8', alignSelf: 'center' }}>BY FP/G</span>
       </div>
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '0 14px 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {pool.map((p) => {
@@ -143,7 +143,7 @@ export function DraftScreen({ opp, onStart }: { opp: Opponent; onStart: (a: stri
       <div style={{ flex: 'none', padding: '6px 14px 14px', display: 'flex', alignItems: 'center', gap: 10, height: 52 }}>
         <span style={{ width: 30, height: 30, borderRadius: 15, background: me.bg, border: '1.5px solid #E5484D', display: 'grid', placeItems: 'center', font: `italic 900 12px ${DISPLAY}` }}>{me.ini}</span>
         <span style={{ fontSize: 13.5, fontWeight: 800, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.signedIn ? `${me.handle} · You` : 'You'}</span>
-        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: '#93A0B8' }}>AVG OVR</span>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: '#93A0B8' }}>AVG FP/G</span>
         <span className="vb-num" style={{ fontSize: 22, color: '#F2666B' }}>{aA ?? '—'}</span>
       </div>
     </div>

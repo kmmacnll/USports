@@ -11,19 +11,20 @@ import { VsScreen } from './match';
 import { battleUser, MeProvider, recordResult } from './me';
 import { LeaguesScreen, type MyLeague } from './leagues';
 import { LadderScreen, ResultScreen } from './result';
+import { SettingsScreen } from './settings';
 
-type Screen = 'home' | 'lobby' | 'friends' | 'ladder' | 'leagues' | 'vs' | 'draft' | 'live' | 'result';
-const LINKABLE = ['home', 'lobby', 'friends', 'ladder', 'leagues'] as const;
+type Screen = 'home' | 'lobby' | 'friends' | 'ladder' | 'leagues' | 'settings' | 'vs' | 'draft' | 'live' | 'result';
+const LINKABLE = ['home', 'lobby', 'friends', 'ladder', 'leagues', 'settings'] as const;
 
 /**
  * Draft Battles. Only Play AI is live in the web app: ranked queues, friends,
  * invites and the ladder need real opponents from the API, so those screens
  * say "coming soon" instead of showing made-up users.
  */
-export function BattlesApp({ displayName, pools, leagues }: {
-  displayName: string | null; pools: { W: Player[]; M: Player[] }; leagues: MyLeague[];
+export function BattlesApp({ displayName, avatar, pools, leagues }: {
+  displayName: string | null; avatar: string | null; pools: { W: Player[]; M: Player[] }; leagues: MyLeague[];
 }) {
-  const me = useMemo(() => battleUser(displayName), [displayName]);
+  const me = useMemo(() => battleUser(displayName, avatar), [displayName, avatar]);
   const [screen, setScreen] = useState<Screen>('home');
   const [sport, setSport] = useState<SportId>('hockey');
   const [gender, setGender] = useState<Gender>('W');
@@ -65,8 +66,9 @@ export function BattlesApp({ displayName, pools, leagues }: {
       body = <LobbyScreen sport={sport} gender={gender} setSport={setSport} setGender={setGender} onBack={back}
         onAI={playAI} onFriend={() => nav('friends')} poolSize={poolSize} />;
       break;
-    case 'friends': body = <FriendsScreen sportName={sportName} genderName={genderName} onBack={back} onAI={playAI} />; break;
+    case 'friends': body = <FriendsScreen onBack={back} onAI={playAI} />; break;
     case 'leagues': body = <LeaguesScreen leagues={leagues} signedIn={me.signedIn} onBack={back} />; break;
+    case 'settings': body = <SettingsScreen onBack={back} />; break;
     case 'ladder': body = <LadderScreen onBack={back} onPlay={() => nav('lobby', true)} />; break;
     case 'vs': body = <VsScreen opp={AI_OPP} onDone={() => nav('draft', true)} />; break;
     case 'draft':

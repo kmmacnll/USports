@@ -65,8 +65,11 @@ describe('GET /players', () => {
     expect(p.ovr).toBeGreaterThanOrEqual(40);
     expect(Object.keys(p.sub_ratings).sort()).toEqual(['HND', 'POS', 'REF', 'STA']);
     expect(JSON.stringify(res.body)).not.toMatch(/logo|photo|headshot|image/i);
-    const ovrs = res.body.data.map((x: { ovr: number }) => x.ovr);
-    expect([...ovrs].sort((a, b) => b - a)).toEqual(ovrs);
+    // Ranked by fantasy points per game; players without a scored game this season come last.
+    expect(p).toHaveProperty('fppg');
+    expect(p).toHaveProperty('fppg_change');
+    const fppg = res.body.data.map((x: { fppg: number | null }) => x.fppg ?? -Infinity);
+    expect([...fppg].sort((a, b) => b - a)).toEqual(fppg);
     await request(app).get('/api/v1/players?sport_id=usports_fb&position=QB').expect(200);
     const bad = await request(app).get('/api/v1/players?sport=curling&gender=men').expect(400);
     expect(bad.body.error.code).toBe('VALIDATION_ERROR');

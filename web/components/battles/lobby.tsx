@@ -19,7 +19,7 @@ export function LobbyScreen({ sport, gender, setSport, setGender, onBack, onAI, 
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <TopBar title="Draft Battle" onBack={onBack} />
+      <TopBar title="Battles" onBack={onBack} />
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, padding: '8px 16px 0' }}>
         <span className="vb-label" id="sport-label">Choose a sport</span>
         <div role="radiogroup" aria-labelledby="sport-label" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10 }}>
@@ -69,12 +69,12 @@ export function LobbyScreen({ sport, gender, setSport, setGender, onBack, onAI, 
 }
 
 // ---------- Coming-soon screens (need real users from the API) ----------
-function ComingSoon({ icon, title, body, action }: { icon: string; title: string; body: string; action?: React.ReactNode }) {
+function ComingSoon({ icon, title, body, action }: { icon: string; title: string; body?: string; action?: React.ReactNode }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '0 28px 60px', textAlign: 'center' }}>
       <div className="vb-tile" style={{ width: 96, height: 96, display: 'grid', placeItems: 'center' }}><Icon name={icon} size={42} color="#8EB1F5" /></div>
       <span style={{ fontSize: 20, fontWeight: 800 }}>{title}</span>
-      <span style={{ fontSize: 13, lineHeight: 1.5, color: '#93A0B8' }}>{body}</span>
+      {body && <span style={{ fontSize: 13, lineHeight: 1.5, color: '#93A0B8' }}>{body}</span>}
       {action}
     </div>
   );
@@ -86,13 +86,18 @@ const PlayAIButton = ({ onClick, label = 'Play AI instead' }: { onClick: () => v
   </button>
 );
 
-export function FriendsScreen({ sportName, genderName, onBack, onAI }: { sportName: string; genderName: string; onBack: () => void; onAI: () => void }) {
+export function FriendsScreen({ onBack, onAI }: { onBack: () => void; onAI: () => void }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <TopBar title="Play a Friend" onBack={onBack} right={<Chip tone="muted" style={{ fontSize: 10.5 }}>UNRANKED</Chip>} />
       <ComingSoon icon="group_add" title="No friends yet"
-        body={`Adding friends and challenging them to a ${genderName} ${sportName} Draft Battle is coming soon.`}
-        action={<PlayAIButton onClick={onAI} />} />
+        action={<>
+          {/* Not wired up yet: friends need an API. */}
+          <button type="button" className="vb-tile vb-press" style={{ marginTop: 8, height: 48, padding: '0 20px', borderRadius: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}>
+            <Icon name="person_add" size={19} />Add friends
+          </button>
+          <PlayAIButton onClick={onAI} />
+        </>} />
     </div>
   );
 }

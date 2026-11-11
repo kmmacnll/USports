@@ -1,5 +1,6 @@
 // Draft Battles data and match simulation.
-// The player pool is real U Sports athletes rated by the API (GET /players);
+// The player pool is real U Sports athletes from the API (GET /players), valued by
+// fantasy points per game (fp) this season;
 // app/battles/page.tsx loads it and BattlesApp registers it with setPool().
 // No fictional athletes or schools live here.
 
@@ -10,7 +11,8 @@ export interface Rating { l: string; v: number }
 export interface Player {
   /** logo: /logos/<school slug>.png when that file exists in web/public/logos, else null. */
   id: string; first: string; last: string; school: string; schoolName: string; logo: string | null; pos: Pos;
-  ovr: number; num: string; isNew: boolean; change: number | null; tint: string; ratings: Rating[];
+  /** fp: fantasy points per game this season; change: fp gained over the past week. */
+  fp: number; num: string; isNew: boolean; change: number | null; tint: string; ratings: Rating[];
 }
 
 /** A rated athlete as GET /players returns it. */
@@ -18,15 +20,16 @@ export interface ApiPlayer {
   athlete_id: string; first_name: string; last_name: string; school: string; school_id: string; conference: string | null;
   jersey_number: string | null; class_year: string | null; position: string; ovr: number; sub_ratings: Record<string, number>;
   is_new: boolean; games_used: number; ovr_change: number | null;
+  fppg: number | null; fppg_change: number | null; fantasy_games: number;
 }
 
 const hash = (s: string) => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const TINTS = ['#3A7BD5', '#2E9E6A', '#8E3B46', '#C46A2B', '#6B4FB8', '#B23A48', '#5F7488', '#2F8F5B', '#2F5FA8', '#A8862B'];
 
-/** Short school code for the cards: "UBC" stays, "Laval" → LAV, "Toronto Metropolitan" → TM. */
+/** Short school code for the cards: "UBC", "UofA", "MRU" stay, "Laval" → LAV, "Toronto Metropolitan" → TM. */
 export function schoolCode(name: string) {
   const n = name.replace(/\s*\(.*?\)\s*/g, ' ').replace(/^(Université|University)( de| of)?\s+/i, '').trim();
-  if (/^[A-Z]{2,4}$/.test(n)) return n;
+  if (/^[A-Z]{2,4}$/.test(n) || /^U(of)?[A-Z]{1,2}$/.test(n)) return n;
   const words = n.split(/[\s-]+/).filter(Boolean);
   if (words.length >= 2 && words.length <= 3 && n.length > 12 && words.every((w) => /^[A-Z]/.test(w))) return words.map((w) => w[0]).join('').toUpperCase();
   return (words[0] ?? n).replace(/[^\p{L}]/gu, '').slice(0, 3).toUpperCase();
@@ -38,7 +41,7 @@ export function fromApi(a: ApiPlayer, logos: ReadonlySet<string> = new Set()): P
   return {
     id: a.athlete_id, first: a.first_name, last: a.last_name, school: schoolCode(a.school), schoolName: a.school,
     logo: logos.has(a.school_id) ? `/logos/${encodeURIComponent(a.school_id)}.png` : null,
-    pos: a.position, ovr: a.ovr, num: a.jersey_number ?? '', isNew: a.is_new, change: a.ovr_change,
+    pos: a.position, fp: a.fppg ?? 0, num: a.jersey_number ?? '', isNew: a.is_new, change: a.fppg_change,
     tint: TINTS[hash(a.school_id) % TINTS.length]!,
     ratings: Object.entries(a.sub_ratings).map(([l, v]) => ({ l, v })),
   };
@@ -47,10 +50,24 @@ export function fromApi(a: ApiPlayer, logos: ReadonlySet<string> = new Set()): P
 // The pool the draft uses. Every athlete either side might draft is registered so player() can resolve them.
 let POOL: Player[] = [];
 let PI: Record<string, Player> = {};
+let MEAN_FP = 1;
+let TIER_CUTS = [Infinity, Infinity, Infinity];
 export function setPool(list: Player[], all: Player[] = list) {
   POOL = list;
   PI = Object.fromEntries(all.map((p) => [p.id, p]));
+  const fps = all.map((p) => p.fp).filter((v) => v > 0).sort((a, b) => b - a);
+  MEAN_FP = fps.length ? fps.reduce((t, v) => t + v, 0) / fps.length : 1;
+  // Card tiers by rank in the pool: top 5% elite, next 20% gold, next 35% silver, rest bronze.
+  const at = (q: number) => fps[Math.min(fps.length - 1, Math.floor(fps.length * q))] ?? Infinity;
+  TIER_CUTS = fps.length ? [at(0.05), at(0.25), at(0.6)] : [Infinity, Infinity, Infinity];
 }
+export type Tier = 'elite' | 'gold' | 'silver' | 'bronze';
+export const tierFor = (fp: number): Tier =>
+  fp > 0 && fp >= TIER_CUTS[0]! ? 'elite' : fp > 0 && fp >= TIER_CUTS[1]! ? 'gold' : fp > 0 && fp >= TIER_CUTS[2]! ? 'silver' : 'bronze';
+/** Fantasy points per game as shown: one decimal. */
+export const fmtFp = (fp: number) => fp.toFixed(1);
+/** Sim strength on a 40-100 scale: 70 is a pool-average producer. */
+const simRating = (fp: number) => Math.max(40, Math.min(100, (70 * fp) / MEAN_FP));
 export const pool = () => POOL;
 export const player = (id: string) => PI[id]!;
 
@@ -58,14 +75,16 @@ export const NEED: Record<Pos, number> = { F: 3, D: 2, G: 1 };
 export const DRAFT_PICKS = 12;
 export const PICK_SECONDS = 20;
 
-export const avgOvr = (ids: string[]) =>
-  ids.length ? Math.round(ids.reduce((t, id) => t + player(id).ovr, 0) / ids.length) : null;
+/** Average fantasy points per game of a lineup, one decimal. */
+export const avgFp = (ids: string[]) =>
+  ids.length ? Math.round((ids.reduce((t, id) => t + player(id).fp, 0) / ids.length) * 10) / 10 : null;
+const avgSim = (ids: string[]) => (ids.length ? ids.reduce((t, id) => t + simRating(player(id).fp), 0) / ids.length : null);
 
 export const slotOpen = (picks: string[], pos: Pos) => picks.filter((id) => player(id).pos === pos).length < NEED[pos];
 
 /** Best available player for a side; the opponent sometimes takes the second-best for variety. */
 export function bestPick(picks: string[], taken: string[], opponent: boolean): string | undefined {
-  const c = POOL.filter((p) => !taken.includes(p.id) && slotOpen(picks, p.pos)).sort((a, b) => b.ovr - a.ovr);
+  const c = POOL.filter((p) => !taken.includes(p.id) && slotOpen(picks, p.pos)).sort((a, b) => b.fp - a.fp);
   if (opponent && c.length > 2 && Math.random() < 0.35) return c[1]!.id;
   return c[0]?.id;
 }
@@ -135,12 +154,12 @@ export function simulate(teamA: string[], teamB: string[], seed: number, userA: 
   const goalie = (s: Side) => team(s)[team(s).length - 1]!;
   const skaters = (s: Side) => team(s).slice(0, -1);
   const user = (s: Side) => (s === 'A' ? userA : userB);
-  const strength = (s: Side) => avgOvr(team(s)) ?? 70;
+  const strength = (s: Side) => avgSim(team(s)) ?? 70;
 
   // Weighted scorer: forwards score more, stronger players score more.
   const scorer = (s: Side, not?: string) => {
     const pool = skaters(s).filter((id) => id !== not);
-    const w = pool.map((id) => (player(id).pos === 'F' ? 2.2 : 1) * Math.pow(player(id).ovr / 70, 3));
+    const w = pool.map((id) => (player(id).pos === 'F' ? 2.2 : 1) * Math.pow(simRating(player(id).fp) / 70, 3));
     let r = rnd() * w.reduce((a, b) => a + b, 0);
     for (let i = 0; i < pool.length; i++) { r -= w[i]!; if (r <= 0) return pool[i]!; }
     return pool[pool.length - 1]!;

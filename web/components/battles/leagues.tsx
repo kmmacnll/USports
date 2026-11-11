@@ -16,7 +16,7 @@ const SHORT: Record<string, string> = {
 export function LeaguesScreen({ leagues, signedIn, onBack }: { leagues: MyLeague[]; signedIn: boolean; onBack: () => void }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <TopBar title="My Leagues" onBack={onBack} />
+      <TopBar title="Fantasy" onBack={onBack} />
       {leagues.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '0 28px 60px', textAlign: 'center' }}>
           <div className="vb-tile" style={{ width: 96, height: 96, display: 'grid', placeItems: 'center' }}><Icon name="emoji_events" size={44} color="#8EB1F5" /></div>
